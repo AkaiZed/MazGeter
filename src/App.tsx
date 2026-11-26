@@ -65,7 +65,6 @@ export default function App() {
             <AddTaskModal
               settings={settings}
               sidebarOpen={sidebarOpen}
-              onToggleSidebar={() => setSidebarOpen((v) => !v)}
               onTaskCreated={() => setActiveTab('queue')}
             />
           )}

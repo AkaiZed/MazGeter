@@ -63,8 +63,8 @@ export const MediaToolsView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-3xl mx-auto space-y-6">
+    <div className="flex-1 overflow-y-auto p-5">
+      <div className="w-full space-y-5">
         <div>
           <h1 className="text-lg font-bold text-white flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-violet-400" />

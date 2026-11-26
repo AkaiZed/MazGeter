@@ -50,8 +50,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-3xl mx-auto space-y-6">
+    <div className="flex-1 overflow-y-auto p-5">
+      <div className="w-full space-y-5">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-white">Cài đặt hệ thống</h1>

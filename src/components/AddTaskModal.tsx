@@ -9,11 +9,8 @@ import {
   Loader2,
   Magnet,
   Music,
-  PanelLeftClose,
-  PanelLeftOpen,
   Scissors,
   Search,
-  Sparkles,
   Square,
 } from 'lucide-react';
 import { AppSettings, MediaInfo } from '../types';
@@ -23,7 +20,6 @@ import { formatPreciseTime, TimelineTrimmer } from './TimelineTrimmer';
 interface AddTaskModalProps {
   settings: AppSettings | null;
   sidebarOpen: boolean;
-  onToggleSidebar: () => void;
   onTaskCreated: () => void;
 }
 
@@ -32,7 +28,6 @@ type ModalMode = 'media' | 'direct';
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   settings,
   sidebarOpen,
-  onToggleSidebar,
   onTaskCreated,
 }) => {
   const [mode, setMode] = useState<ModalMode>('media');
@@ -258,41 +253,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#0b0e14] overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-3.5 border-b border-white/[0.06] flex items-center justify-between shrink-0 bg-[#0d111a]/60">
-        <div className="flex items-center gap-2.5">
-          <Sparkles className="w-5 h-5 text-indigo-400" />
-          <h1 className="text-base font-bold text-white">Tạo tác vụ tải xuống</h1>
-        </div>
-        <button
-          type="button"
-          onClick={onToggleSidebar}
-          className={`p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
-            !sidebarOpen
-              ? 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25'
-              : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
-          }`}
-          title={sidebarOpen ? 'Ẩn thanh bên để mở rộng không gian' : 'Hiện thanh bên'}
-        >
-          {sidebarOpen ? (
-            <PanelLeftClose className="w-4 h-4" />
-          ) : (
-            <PanelLeftOpen className="w-4 h-4" />
-          )}
-        </button>
-      </div>
-
-      {/* Main Scrollable Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div
-          className={`mx-auto w-full ${
-            trimmerVisible && !sidebarOpen
-              ? 'max-w-6xl'
-              : trimmerVisible
-              ? 'max-w-4xl'
-              : 'max-w-3xl'
-          } rounded-2xl bg-[#111724] border border-white/[0.07] shadow-xl overflow-hidden flex flex-col transition-all duration-300`}
-        >
+      {/* Main Full-Width Scrollable Content */}
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="w-full rounded-2xl bg-[#111724] border border-white/[0.07] shadow-xl overflow-hidden flex flex-col transition-all duration-300">
 
         {/* Mode Switcher */}
         <div className="px-5 pt-4">

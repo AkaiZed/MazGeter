@@ -5,13 +5,22 @@ import {
   FolderOpen,
   Loader2,
   Music,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Scissors,
-  Sparkles,
 } from 'lucide-react';
 import { MediaToolProgress } from '../types';
 
-export const MediaToolsView: React.FC = () => {
+interface MediaToolsViewProps {
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
+}
+
+export const MediaToolsView: React.FC<MediaToolsViewProps> = ({
+  sidebarOpen,
+  onToggleSidebar,
+}) => {
   const [inputPath, setInputPath] = useState('');
   const [action, setAction] = useState<'convert' | 'extract-audio' | 'trim'>('convert');
   const [targetFormat, setTargetFormat] = useState<'mp4' | 'mp3' | 'mkv' | 'webm' | 'wav' | 'm4a'>('mp4');
@@ -65,14 +74,29 @@ export const MediaToolsView: React.FC = () => {
   return (
     <div className="flex-1 overflow-y-auto p-5">
       <div className="w-full space-y-5">
-        <div>
-          <h1 className="text-lg font-bold text-white flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-violet-400" />
-            <span>Media Tools (FFmpeg Studio)</span>
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Chuyển đổi định dạng, tách nhạc MP3/WAV và cắt đoạn video nhanh chóng ngay trên máy tính.
-          </p>
+        <div className="flex items-start gap-3">
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className={`mt-0.5 p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+              !sidebarOpen
+                ? 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25'
+                : 'text-indigo-400 hover:text-white hover:bg-white/[0.08]'
+            }`}
+            title={sidebarOpen ? 'Thu gọn thanh bên' : 'Hiện thanh bên'}
+          >
+            {sidebarOpen ? (
+              <PanelLeftClose className="w-4 h-4" />
+            ) : (
+              <PanelLeftOpen className="w-4 h-4" />
+            )}
+          </button>
+          <div>
+            <h1 className="text-lg font-bold text-white">Media Tools (FFmpeg Studio)</h1>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Chuyển đổi định dạng, tách nhạc MP3/WAV và cắt đoạn video nhanh chóng ngay trên máy tính.
+            </p>
+          </div>
         </div>
 
         {/* Action Cards */}

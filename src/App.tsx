@@ -47,10 +47,7 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0b0e14] text-slate-100 overflow-hidden">
-      <TitleBar
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
-      />
+      <TitleBar />
 
       <div className="flex-1 flex min-h-0">
         <Sidebar
@@ -65,6 +62,7 @@ export default function App() {
             <AddTaskModal
               settings={settings}
               sidebarOpen={sidebarOpen}
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
               onTaskCreated={() => setActiveTab('queue')}
             />
           )}
@@ -72,6 +70,8 @@ export default function App() {
             <TaskList
               title="Đang tải & Tạm dừng"
               tasks={filteredTasks}
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
               onOpenNewTask={() => setActiveTab('download')}
             />
           )}
@@ -80,12 +80,24 @@ export default function App() {
               title="Đã hoàn thành & Lịch sử"
               tasks={filteredTasks}
               showClearAll
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
               onOpenNewTask={() => setActiveTab('download')}
             />
           )}
-          {activeTab === 'tools' && <MediaToolsView />}
+          {activeTab === 'tools' && (
+            <MediaToolsView
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            />
+          )}
           {activeTab === 'settings' && (
-            <SettingsView settings={settings} onSettingsUpdated={setSettings} />
+            <SettingsView
+              settings={settings}
+              onSettingsUpdated={setSettings}
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            />
           )}
 
           {/* Minimalist App Footer */}

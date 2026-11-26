@@ -1,27 +1,10 @@
 import React from 'react';
-import { Minus, PanelLeftClose, PanelLeftOpen, Square, X, Zap } from 'lucide-react';
+import { Minus, Square, X, Zap } from 'lucide-react';
 
-interface TitleBarProps {
-  sidebarOpen: boolean;
-  onToggleSidebar: () => void;
-}
-
-export const TitleBar: React.FC<TitleBarProps> = ({ sidebarOpen, onToggleSidebar }) => {
+export const TitleBar: React.FC = () => {
   return (
     <header className="h-10 bg-[#0d111a] border-b border-white/[0.06] flex items-center justify-between px-3 drag-region shrink-0">
       <div className="flex items-center gap-2.5">
-        <button
-          type="button"
-          onClick={onToggleSidebar}
-          className="no-drag p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
-          title={sidebarOpen ? 'Ẩn thanh bên' : 'Hiện thanh bên'}
-        >
-          {sidebarOpen ? (
-            <PanelLeftClose className="w-4 h-4" />
-          ) : (
-            <PanelLeftOpen className="w-4 h-4" />
-          )}
-        </button>
         <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
           <Zap className="w-3.5 h-3.5 text-white fill-white" />
         </div>

@@ -9,6 +9,8 @@ import {
   Loader2,
   Magnet,
   Music,
+  PanelLeftClose,
+  PanelLeftOpen,
   Scissors,
   Search,
   Square,
@@ -20,6 +22,7 @@ import { formatPreciseTime, TimelineTrimmer } from './TimelineTrimmer';
 interface AddTaskModalProps {
   settings: AppSettings | null;
   sidebarOpen: boolean;
+  onToggleSidebar: () => void;
   onTaskCreated: () => void;
 }
 
@@ -28,6 +31,7 @@ type ModalMode = 'media' | 'direct';
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   settings,
   sidebarOpen,
+  onToggleSidebar,
   onTaskCreated,
 }) => {
   const [mode, setMode] = useState<ModalMode>('media');
@@ -52,6 +56,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const [loadingPeaks, setLoadingPeaks] = useState(false);
   const scannedWaveForRef = useRef<string | null>(null);
+  const formatSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Direct/Torrent mode state (Motrix)
   const [customFileName, setCustomFileName] = useState('');
@@ -180,6 +185,16 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     };
   }, [mode, urlInput, downloadPlaylist, analyzing]);
 
+  // When sidebar is collapsed in MP4/Video detail mode, smoothly scroll so Format + Expanded Video + Waveform fill the viewport
+  useEffect(() => {
+    if (!sidebarOpen && trimmerVisible && !isAudioFormat) {
+      const timer = window.setTimeout(() => {
+        formatSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+      return () => window.clearTimeout(timer);
+    }
+  }, [sidebarOpen, trimmerVisible, isAudioFormat]);
+
   const handleAddTorrentFile = async () => {
     const file = await window.mazgeter?.selectFile([
       { name: 'Torrent Files', extensions: ['torrent'] },
@@ -253,6 +268,27 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#0b0e14] overflow-hidden">
+      {/* Compact Header with Sidebar Toggle replacing the diamond/star icon */}
+      <div className="px-5 py-3 border-b border-white/[0.06] flex items-center gap-2.5 shrink-0 bg-[#0d111a]/60">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className={`p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+            !sidebarOpen
+              ? 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25'
+              : 'text-indigo-400 hover:text-white hover:bg-white/[0.08]'
+          }`}
+          title={sidebarOpen ? 'Thu gọn thanh bên & phóng to vùng xem video' : 'Hiện thanh bên'}
+        >
+          {sidebarOpen ? (
+            <PanelLeftClose className="w-4 h-4" />
+          ) : (
+            <PanelLeftOpen className="w-4 h-4" />
+          )}
+        </button>
+        <h1 className="text-sm font-bold text-white">Tạo tác vụ tải xuống</h1>
+      </div>
+
       {/* Main Full-Width Scrollable Content */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="w-full rounded-2xl bg-[#111724] border border-white/[0.07] shadow-xl overflow-hidden flex flex-col transition-all duration-300">
@@ -440,14 +476,14 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
           {/* Media Options */}
           {mode === 'media' ? (
-            <div className="space-y-3.5">
+            <div ref={formatSectionRef} className="space-y-3.5 scroll-mt-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-slate-400 block mb-1.5">
                     Định dạng
                   </label>
                   <div className="grid grid-cols-5 gap-1">
-                    {(['mp4', 'mkv', 'mp3', 'm4a', 'wav'] as const).map((fmt) => (
+                    {(['mp4', 'mp3', 'mkv', 'm4a', 'wav'] as const).map((fmt) => (
                       <button
                         key={fmt}
                         type="button"

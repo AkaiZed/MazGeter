@@ -6,6 +6,8 @@ import {
   Film,
   FolderOpen,
   Globe,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pause,
   Play,
   Plus,
@@ -18,6 +20,8 @@ interface TaskListProps {
   title: string;
   tasks: DownloadTask[];
   showClearAll?: boolean;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
   onOpenNewTask: () => void;
 }
 
@@ -25,17 +29,37 @@ export const TaskList: React.FC<TaskListProps> = ({
   title,
   tasks,
   showClearAll,
+  sidebarOpen,
+  onToggleSidebar,
   onOpenNewTask,
 }) => {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Top Toolbar */}
-      <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-lg font-bold text-white">{title}</h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {tasks.length} tác vụ trong danh sách
-          </p>
+      <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between shrink-0 bg-[#0d111a]/60">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className={`p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+              !sidebarOpen
+                ? 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25'
+                : 'text-indigo-400 hover:text-white hover:bg-white/[0.08]'
+            }`}
+            title={sidebarOpen ? 'Thu gọn thanh bên' : 'Hiện thanh bên'}
+          >
+            {sidebarOpen ? (
+              <PanelLeftClose className="w-4 h-4" />
+            ) : (
+              <PanelLeftOpen className="w-4 h-4" />
+            )}
+          </button>
+          <div>
+            <h1 className="text-base font-bold text-white leading-tight">{title}</h1>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {tasks.length} tác vụ trong danh sách
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

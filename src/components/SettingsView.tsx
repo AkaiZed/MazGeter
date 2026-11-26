@@ -3,6 +3,8 @@ import {
   CheckCircle2,
   Cpu,
   FolderOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Save,
   XCircle,
@@ -12,11 +14,15 @@ import { AppSettings, BinaryStatus } from '../types';
 interface SettingsViewProps {
   settings: AppSettings | null;
   onSettingsUpdated: (next: AppSettings) => void;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
   onSettingsUpdated,
+  sidebarOpen,
+  onToggleSidebar,
 }) => {
   const [form, setForm] = useState<AppSettings | null>(settings);
   const [binaries, setBinaries] = useState<BinaryStatus | null>(null);
@@ -53,11 +59,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     <div className="flex-1 overflow-y-auto p-5">
       <div className="w-full space-y-5">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-white">Cài đặt hệ thống</h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Cấu hình thư mục tải, thông số đa luồng aria2c và kiểm tra trạng thái các lõi engine.
-            </p>
+          <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className={`mt-0.5 p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+                !sidebarOpen
+                  ? 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25'
+                  : 'text-indigo-400 hover:text-white hover:bg-white/[0.08]'
+              }`}
+              title={sidebarOpen ? 'Thu gọn thanh bên' : 'Hiện thanh bên'}
+            >
+              {sidebarOpen ? (
+                <PanelLeftClose className="w-4 h-4" />
+              ) : (
+                <PanelLeftOpen className="w-4 h-4" />
+              )}
+            </button>
+            <div>
+              <h1 className="text-lg font-bold text-white">Cài đặt hệ thống</h1>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Cấu hình thư mục tải, thông số đa luồng aria2c và kiểm tra trạng thái các lõi engine.
+              </p>
+            </div>
           </div>
           <button
             onClick={handleSave}

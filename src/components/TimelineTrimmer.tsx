@@ -723,7 +723,7 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
         <div
           ref={videoAreaRef}
           className={`relative bg-black/85 flex items-center justify-center ${
-            expanded ? 'h-[48vh] min-h-[340px] max-h-[560px]' : 'h-48'
+            expanded ? 'h-[56vh] min-h-[380px] max-h-[640px]' : 'h-48'
           } border-b border-white/[0.06] overflow-hidden group transition-[height] duration-300 ease-out`}
         >
           {videoUrl ? (

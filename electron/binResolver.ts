@@ -28,10 +28,10 @@ function findInPath(exeName: string): string | null {
 
 function getCandidateDirs(): string[] {
   const dirs: string[] = [];
-  if (app.isPackaged) {
+  if (app?.isPackaged) {
     dirs.push(path.join(process.resourcesPath, 'bin'));
   }
-  const appRoot = app.getAppPath();
+  const appRoot = app?.getAppPath ? app.getAppPath() : process.cwd();
   dirs.push(path.join(appRoot, 'resources', 'bin'));
   dirs.push(path.join(process.cwd(), 'resources', 'bin'));
 

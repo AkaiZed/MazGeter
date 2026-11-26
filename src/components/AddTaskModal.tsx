@@ -65,18 +65,20 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   }, [open, settings]);
 
   const isAudioFormat = ['mp3', 'm4a', 'wav'].includes(mediaFormat);
-  const trimmerVisible = mode === 'media' && (isAudioFormat || showVideoTrimmer);
+  const hasAnalyzedMedia = Boolean(mediaInfo);
+  const trimmerVisible = mode === 'media' && hasAnalyzedMedia && (isAudioFormat || showVideoTrimmer);
   const totalDuration = mediaInfo?.duration || 60;
 
-  // Automatically extract real audio waveform peaks when MP3/Audio is active & analyzed
+  // Automatically extract real audio waveform peaks when link is analyzed & trimmer is visible
   useEffect(() => {
-    if (!open || !mediaInfo?.audioStreamUrl || waveformPeaks.length > 0 || loadingPeaks) return;
+    const waveUrl = mediaInfo?.waveformAudioUrl || mediaInfo?.audioStreamUrl;
+    if (!open || !waveUrl || waveformPeaks.length > 0 || loadingPeaks) return;
     if (!trimmerVisible) return;
 
     let cancelled = false;
     setLoadingPeaks(true);
     window.mazgeter
-      ?.extractWaveform(mediaInfo.audioStreamUrl, 260)
+      ?.extractWaveform(waveUrl, 260, mediaInfo?.waveformFilesize)
       .then((peaks) => {
         if (!cancelled && Array.isArray(peaks) && peaks.length > 0) {
           setWaveformPeaks(peaks);
@@ -421,8 +423,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                 </div>
               </div>
 
-              {/* Minimalist Video Trim Toggle (for MP4/MKV); Audio (MP3/M4A/WAV) opens Waveform Trimmer directly */}
-              {!isAudioFormat && (
+              {/* Minimalist Video Trim Toggle — only shown AFTER a link is analyzed */}
+              {hasAnalyzedMedia && !isAudioFormat && (
                 <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#0b0e14] border border-white/[0.06]">
                   <button
                     type="button"

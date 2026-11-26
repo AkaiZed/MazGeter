@@ -31,8 +31,8 @@ const api = {
 
   // Media Analysis & Downloads
   analyzeMedia: (url: string): Promise<MediaInfo> => ipcRenderer.invoke('media:analyze', url),
-  extractWaveform: (audioUrl: string, bars?: number): Promise<number[]> =>
-    ipcRenderer.invoke('media:waveform', audioUrl, bars),
+  extractWaveform: (audioUrl: string, bars?: number, filesize?: number | null): Promise<number[]> =>
+    ipcRenderer.invoke('media:waveform', audioUrl, bars, filesize),
   addMediaTask: (payload: AddMediaTaskPayload): Promise<DownloadTask> =>
     ipcRenderer.invoke('task:addMedia', payload),
   addAria2Task: (payload: AddAria2TaskPayload): Promise<string> =>

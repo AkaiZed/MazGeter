@@ -175,8 +175,8 @@ function registerIpc() {
     return media.analyzeUrl(url);
   });
 
-  ipcMain.handle('media:waveform', async (_e, audioUrl: string, bars?: number) => {
-    return media.extractWaveform(audioUrl, bars);
+  ipcMain.handle('media:waveform', async (_e, audioUrl: string, bars?: number, filesize?: number | null) => {
+    return media.extractWaveform(audioUrl, bars, filesize);
   });
 
   // Add tasks

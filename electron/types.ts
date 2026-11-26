@@ -56,6 +56,8 @@ export interface MediaInfo {
   isPlaylist: boolean;
   playlistCount?: number;
   audioStreamUrl?: string | null;
+  waveformAudioUrl?: string | null;
+  waveformFilesize?: number | null;
   videoStreamUrl?: string | null;
   videoQualities: QualityOption[];
   audioQualities: QualityOption[];

@@ -129,6 +129,8 @@ export class MediaEngine {
 
     // Pick direct playable preview streams for audio waveform & video scrubbing
     let audioStreamUrl: string | null = null;
+    let waveformAudioUrl: string | null = null;
+    let waveformFilesize: number | null = null;
     let videoStreamUrl: string | null = null;
     if (Array.isArray(data.formats)) {
       const httpFormats = data.formats.filter(
@@ -138,17 +140,32 @@ export class MediaEngine {
           (!f.protocol || f.protocol === 'https' || f.protocol === 'http')
       );
 
-      // Best playable audio-only stream (prefer m4a/mp4/webm)
-      const audioCandidates = httpFormats
-        .filter(
-          (f: { acodec?: string; vcodec?: string; ext?: string }) =>
-            f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none')
-        )
-        .sort((a: { abr?: number; ext?: string }, b: { abr?: number; ext?: string }) => {
+      // Audio-only streams
+      const audioOnly = httpFormats.filter(
+        (f: { acodec?: string; vcodec?: string }) =>
+          f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none')
+      );
+
+      // Best playable audio-only stream (prefer m4a/mp4 for HTML5 <audio> playback)
+      const audioCandidates = [...audioOnly].sort(
+        (a: { abr?: number; ext?: string }, b: { abr?: number; ext?: string }) => {
           const scoreA = (a.ext === 'm4a' ? 500 : 0) + (a.abr || 0);
           const scoreB = (b.ext === 'm4a' ? 500 : 0) + (b.abr || 0);
           return scoreB - scoreA;
-        });
+        }
+      );
+
+      // Smallest / lowest-bitrate audio-only stream for ultra-fast waveform scan (~30-50kbps)
+      const smallestAudio = [...audioOnly].sort(
+        (
+          a: { abr?: number; filesize?: number; filesize_approx?: number },
+          b: { abr?: number; filesize?: number; filesize_approx?: number }
+        ) => {
+          const sizeA = a.filesize || a.filesize_approx || (a.abr || 999) * 10000;
+          const sizeB = b.filesize || b.filesize_approx || (b.abr || 999) * 10000;
+          return sizeA - sizeB;
+        }
+      )[0];
 
       // Best progressive MP4 (both audio + video, <= 720p for fast scrub preview)
       const progressiveVideos = httpFormats
@@ -165,8 +182,11 @@ export class MediaEngine {
 
       videoStreamUrl = preferredPreview?.url || null;
       audioStreamUrl = audioCandidates[0]?.url || videoStreamUrl || (typeof data.url === 'string' ? data.url : null);
+      waveformAudioUrl = smallestAudio?.url || audioStreamUrl;
+      waveformFilesize = smallestAudio?.filesize || smallestAudio?.filesize_approx || null;
     } else if (typeof data.url === 'string') {
       audioStreamUrl = data.url;
+      waveformAudioUrl = data.url;
       videoStreamUrl = data.url;
     }
 
@@ -182,6 +202,8 @@ export class MediaEngine {
       isPlaylist,
       playlistCount: isPlaylist ? data.entries.length : undefined,
       audioStreamUrl,
+      waveformAudioUrl,
+      waveformFilesize,
       videoStreamUrl,
       videoQualities,
       audioQualities,
@@ -189,23 +211,77 @@ export class MediaEngine {
     };
   }
 
-  async extractWaveform(audioUrl: string, bars = 280): Promise<number[]> {
+  private async fetchAudioFast(url: string, knownSize?: number | null): Promise<Buffer | null> {
+    const headers = {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    };
+
+    try {
+      let totalSize = knownSize && knownSize > 0 ? knownSize : 0;
+      if (!totalSize) {
+        const head = await fetch(url, { method: 'HEAD', headers });
+        const len = Number(head.headers.get('content-length') || 0);
+        if (len > 0) totalSize = len;
+      }
+
+      // Cap download at 15MB so huge multi-hour streams never stall
+      const maxBytes = 15 * 1024 * 1024;
+      const targetSize = totalSize > 0 ? Math.min(totalSize, maxBytes) : 0;
+
+      // Parallel 8-chunk Range fetch bypasses YouTube's single-stream throttle (~0.5-1.5s for 15min!)
+      if (targetSize >= 256 * 1024) {
+        const chunks = 8;
+        const partSize = Math.ceil(targetSize / chunks);
+        const ranges: Array<[number, number]> = [];
+        for (let i = 0; i < chunks; i++) {
+          const start = i * partSize;
+          const end = Math.min(targetSize - 1, start + partSize - 1);
+          if (start <= end) ranges.push([start, end]);
+        }
+
+        const parts = await Promise.all(
+          ranges.map(async ([start, end]) => {
+            const res = await fetch(url, {
+              headers: { ...headers, Range: `bytes=${start}-${end}` },
+            });
+            if (!res.ok && res.status !== 206) {
+              throw new Error(`HTTP ${res.status}`);
+            }
+            return Buffer.from(await res.arrayBuffer());
+          })
+        );
+        return Buffer.concat(parts);
+      }
+
+      // Single fast fetch for small files
+      const res = await fetch(url, { headers });
+      if (!res.ok) return null;
+      return Buffer.from(await res.arrayBuffer());
+    } catch {
+      return null;
+    }
+  }
+
+  async extractWaveform(audioUrl: string, bars = 280, filesize?: number | null): Promise<number[]> {
     const ffmpeg = resolveBinary('ffmpeg.exe');
     if (!ffmpeg || !audioUrl) return [];
 
+    // 1. Download tiny low-bitrate audio into RAM in parallel (~0.5-1.5s)
+    const audioBuf = await this.fetchAudioFast(audioUrl, filesize);
+
+    // 2. Decode locally via FFmpeg (~0.1-0.2s)
     return new Promise<number[]>((resolve) => {
       const args = [
         '-v',
         'error',
-        '-t',
-        '1800',
         '-i',
-        audioUrl,
+        audioBuf ? 'pipe:0' : audioUrl,
         '-vn',
         '-ac',
         '1',
         '-ar',
-        '800',
+        '400',
         '-f',
         's16le',
         'pipe:1',
@@ -253,7 +329,7 @@ export class MediaEngine {
           // ignore
         }
         finish();
-      }, 15000);
+      }, 12000);
 
       child.stdout.on('data', (c: Buffer) => chunks.push(c));
       child.on('close', finish);
@@ -264,6 +340,11 @@ export class MediaEngine {
           resolve([]);
         }
       });
+
+      if (audioBuf) {
+        child.stdin.on('error', () => {});
+        child.stdin.end(audioBuf);
+      }
     });
   }
 

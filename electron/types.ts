@@ -55,6 +55,8 @@ export interface MediaInfo {
   extractor: string;
   isPlaylist: boolean;
   playlistCount?: number;
+  audioStreamUrl?: string | null;
+  videoStreamUrl?: string | null;
   videoQualities: QualityOption[];
   audioQualities: QualityOption[];
   subtitles: string[];

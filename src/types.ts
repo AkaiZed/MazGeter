@@ -55,6 +55,8 @@ export interface MediaInfo {
   extractor: string;
   isPlaylist: boolean;
   playlistCount?: number;
+  audioStreamUrl?: string | null;
+  videoStreamUrl?: string | null;
   videoQualities: QualityOption[];
   audioQualities: QualityOption[];
   subtitles: string[];
@@ -140,6 +142,7 @@ export interface MazGeterAPI {
   selectFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>;
   readClipboard: () => Promise<string>;
   analyzeMedia: (url: string) => Promise<MediaInfo>;
+  extractWaveform: (audioUrl: string, bars?: number) => Promise<number[]>;
   addMediaTask: (payload: AddMediaTaskPayload) => Promise<DownloadTask>;
   addAria2Task: (payload: AddAria2TaskPayload) => Promise<string>;
   addTorrentTask: (filePath: string, dir?: string) => Promise<string>;

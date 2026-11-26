@@ -12,11 +12,11 @@ import {
   Scissors,
   Search,
   Sparkles,
-  Subtitles,
   X,
 } from 'lucide-react';
 import { AppSettings, MediaInfo } from '../types';
 import { detectUrlType } from '../utils';
+import { formatPreciseTime, TimelineTrimmer } from './TimelineTrimmer';
 
 interface AddTaskModalProps {
   open: boolean;
@@ -38,15 +38,18 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   const [saveDir, setSaveDir] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Media mode state (XGetter)
+  // Media mode state (XGetter + Waveform Trimmer)
   const [analyzing, setAnalyzing] = useState(false);
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null);
   const [mediaFormat, setMediaFormat] = useState<'mp4' | 'mkv' | 'mp3' | 'm4a' | 'wav'>('mp4');
   const [quality, setQuality] = useState('1080');
-  const [downloadSubs, setDownloadSubs] = useState(false);
-  const [subLang, setSubLang] = useState('vi,en');
-  const [trimStart, setTrimStart] = useState('');
-  const [trimEnd, setTrimEnd] = useState('');
+
+  // Trimmer state
+  const [showVideoTrimmer, setShowVideoTrimmer] = useState(false);
+  const [trimStartSec, setTrimStartSec] = useState(0);
+  const [trimEndSec, setTrimEndSec] = useState(60);
+  const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
+  const [loadingPeaks, setLoadingPeaks] = useState(false);
 
   // Direct/Torrent mode state (Motrix)
   const [customFileName, setCustomFileName] = useState('');
@@ -61,9 +64,35 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     }
   }, [open, settings]);
 
-  if (!open) return null;
-
   const isAudioFormat = ['mp3', 'm4a', 'wav'].includes(mediaFormat);
+  const trimmerVisible = mode === 'media' && (isAudioFormat || showVideoTrimmer);
+  const totalDuration = mediaInfo?.duration || 60;
+
+  // Automatically extract real audio waveform peaks when MP3/Audio is active & analyzed
+  useEffect(() => {
+    if (!open || !mediaInfo?.audioStreamUrl || waveformPeaks.length > 0 || loadingPeaks) return;
+    if (!trimmerVisible) return;
+
+    let cancelled = false;
+    setLoadingPeaks(true);
+    window.mazgeter
+      ?.extractWaveform(mediaInfo.audioStreamUrl, 260)
+      .then((peaks) => {
+        if (!cancelled && Array.isArray(peaks) && peaks.length > 0) {
+          setWaveformPeaks(peaks);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoadingPeaks(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, mediaInfo, trimmerVisible, waveformPeaks.length, loadingPeaks]);
+
+  if (!open) return null;
 
   const handlePaste = async () => {
     try {
@@ -92,9 +121,13 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     setError(null);
     setAnalyzing(true);
     setMediaInfo(null);
+    setWaveformPeaks([]);
     try {
       const info = await window.mazgeter!.analyzeMedia(url);
       setMediaInfo(info);
+      const dur = info.duration || 60;
+      setTrimStartSec(0);
+      setTrimEndSec(dur);
       if (info.videoQualities.length > 0 && !isAudioFormat) {
         setQuality(info.videoQualities[1]?.value || info.videoQualities[0].value);
       }
@@ -133,6 +166,10 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     setError(null);
     try {
       if (mode === 'media') {
+        const isTrimmed =
+          trimmerVisible &&
+          (trimStartSec > 0.05 || (mediaInfo?.duration ? trimEndSec < mediaInfo.duration - 0.1 : trimEndSec < 59.9));
+
         await window.mazgeter!.addMediaTask({
           url: raw,
           title: mediaInfo?.title,
@@ -140,10 +177,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
           format: mediaFormat,
           quality,
           dir: saveDir || undefined,
-          downloadSubtitles: downloadSubs,
-          subtitleLang: subLang,
-          trimStart: trimStart.trim() || undefined,
-          trimEnd: trimEnd.trim() || undefined,
+          trimStart: isTrimmed ? formatPreciseTime(trimStartSec) : undefined,
+          trimEnd: isTrimmed ? formatPreciseTime(trimEndSec) : undefined,
           isPlaylist: mediaInfo?.isPlaylist,
         });
       } else {
@@ -163,9 +198,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
       }
       setUrlInput('');
       setMediaInfo(null);
+      setWaveformPeaks([]);
       setCustomFileName('');
-      setTrimStart('');
-      setTrimEnd('');
+      setShowVideoTrimmer(false);
       onTaskCreated();
       onClose();
     } catch (err: unknown) {
@@ -177,7 +212,11 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-[#131926] border border-white/[0.09] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div
+        className={`w-full ${
+          trimmerVisible ? 'max-w-3xl' : 'max-w-2xl'
+        } bg-[#131926] border border-white/[0.09] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] transition-all duration-200`}
+      >
         {/* Header */}
         <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -281,18 +320,18 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
             </div>
           )}
 
-          {/* Media Info Preview Card (XGetter-style) */}
+          {/* Media Info Preview Card */}
           {mode === 'media' && mediaInfo && (
-            <div className="rounded-xl bg-[#0b0e14] border border-indigo-500/25 p-3.5 flex gap-3.5 items-center">
+            <div className="rounded-xl bg-[#0b0e14] border border-indigo-500/25 p-3 flex gap-3.5 items-center">
               {mediaInfo.thumbnail ? (
                 <img
                   src={mediaInfo.thumbnail}
                   alt={mediaInfo.title}
-                  className="w-32 h-20 object-cover rounded-lg border border-white/10 shrink-0"
+                  className="w-28 h-16 object-cover rounded-lg border border-white/10 shrink-0"
                 />
               ) : (
-                <div className="w-32 h-20 rounded-lg bg-indigo-500/10 flex items-center justify-center shrink-0">
-                  <Film className="w-7 h-7 text-indigo-400" />
+                <div className="w-28 h-16 rounded-lg bg-indigo-500/10 flex items-center justify-center shrink-0">
+                  <Film className="w-6 h-6 text-indigo-400" />
                 </div>
               )}
               <div className="min-w-0 flex-1 space-y-1">
@@ -305,7 +344,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                       Playlist ({mediaInfo.playlistCount} mục)
                     </span>
                   )}
-                  <span className="text-xs text-slate-400">{mediaInfo.durationText}</span>
+                  <span className="text-xs text-slate-400 font-mono">
+                    {mediaInfo.durationText}
+                  </span>
                 </div>
                 <p className="text-sm font-semibold text-white truncate">{mediaInfo.title}</p>
                 <p className="text-xs text-slate-400 truncate">{mediaInfo.uploader}</p>
@@ -315,7 +356,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
           {/* Media Options */}
           {mode === 'media' ? (
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-slate-400 block mb-1.5">
@@ -380,54 +421,50 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                 </div>
               </div>
 
-              {/* Extra XGetter options: Subtitles & Trim */}
-              <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-[#0b0e14] border border-white/[0.06]">
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={downloadSubs}
-                      onChange={(e) => setDownloadSubs(e.target.checked)}
-                      className="accent-indigo-500 rounded"
-                    />
-                    <Subtitles className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Tải kèm phụ đề (SRT)</span>
-                  </label>
-                  {downloadSubs && (
-                    <input
-                      type="text"
-                      value={subLang}
-                      onChange={(e) => setSubLang(e.target.value)}
-                      placeholder="vi,en"
-                      className="w-full bg-[#131926] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none"
-                    />
-                  )}
+              {/* Minimalist Video Trim Toggle (for MP4/MKV); Audio (MP3/M4A/WAV) opens Waveform Trimmer directly */}
+              {!isAudioFormat && (
+                <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#0b0e14] border border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={() => setShowVideoTrimmer((v) => !v)}
+                    className="flex items-center gap-2 text-xs font-medium text-slate-200 hover:text-cyan-300 transition-colors cursor-pointer"
+                  >
+                    <Scissors className="w-4 h-4 text-cyan-400" />
+                    <span>Cắt đoạn video (Đầu – Cuối • Zoom cuộn chuột kiểu CapCut)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowVideoTrimmer((v) => !v)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                      showVideoTrimmer
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                        : 'bg-white/[0.06] text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {showVideoTrimmer ? 'Thu gọn' : 'Mở thanh cắt'}
+                  </button>
                 </div>
+              )}
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-300">
-                    <Scissors className="w-3.5 h-3.5 text-violet-400" />
-                    <span>Cắt đoạn (tùy chọn)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={trimStart}
-                      onChange={(e) => setTrimStart(e.target.value)}
-                      placeholder="00:00"
-                      className="w-1/2 bg-[#131926] border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-white outline-none font-mono"
-                    />
-                    <span className="text-slate-500 text-xs">→</span>
-                    <input
-                      type="text"
-                      value={trimEnd}
-                      onChange={(e) => setTrimEnd(e.target.value)}
-                      placeholder="01:30"
-                      className="w-1/2 bg-[#131926] border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-white outline-none font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
+              {/* Interactive Waveform / Video Timeline Trimmer */}
+              {trimmerVisible && (
+                <TimelineTrimmer
+                  mode={isAudioFormat ? 'audio' : 'video'}
+                  duration={totalDuration}
+                  title={mediaInfo?.title}
+                  audioUrl={mediaInfo?.audioStreamUrl}
+                  videoUrl={mediaInfo?.videoStreamUrl}
+                  thumbnail={mediaInfo?.thumbnail}
+                  peaks={waveformPeaks}
+                  loadingPeaks={loadingPeaks}
+                  startSec={trimStartSec}
+                  endSec={trimEndSec}
+                  onChangeRange={(s, e) => {
+                    setTrimStartSec(s);
+                    setTrimEndSec(e);
+                  }}
+                />
+              )}
             </div>
           ) : (
             /* Direct / Torrent Options (Motrix-style) */

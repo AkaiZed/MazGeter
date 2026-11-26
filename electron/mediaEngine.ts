@@ -127,6 +127,49 @@ export class MediaEngine {
         ? data.thumbnails[data.thumbnails.length - 1]?.url
         : null);
 
+    // Pick direct playable preview streams for audio waveform & video scrubbing
+    let audioStreamUrl: string | null = null;
+    let videoStreamUrl: string | null = null;
+    if (Array.isArray(data.formats)) {
+      const httpFormats = data.formats.filter(
+        (f: { url?: string; protocol?: string }) =>
+          typeof f.url === 'string' &&
+          f.url.startsWith('http') &&
+          (!f.protocol || f.protocol === 'https' || f.protocol === 'http')
+      );
+
+      // Best playable audio-only stream (prefer m4a/mp4/webm)
+      const audioCandidates = httpFormats
+        .filter(
+          (f: { acodec?: string; vcodec?: string; ext?: string }) =>
+            f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none')
+        )
+        .sort((a: { abr?: number; ext?: string }, b: { abr?: number; ext?: string }) => {
+          const scoreA = (a.ext === 'm4a' ? 500 : 0) + (a.abr || 0);
+          const scoreB = (b.ext === 'm4a' ? 500 : 0) + (b.abr || 0);
+          return scoreB - scoreA;
+        });
+
+      // Best progressive MP4 (both audio + video, <= 720p for fast scrub preview)
+      const progressiveVideos = httpFormats
+        .filter(
+          (f: { acodec?: string; vcodec?: string; ext?: string }) =>
+            f.acodec && f.acodec !== 'none' && f.vcodec && f.vcodec !== 'none' && f.ext === 'mp4'
+        )
+        .sort((a: { height?: number }, b: { height?: number }) => (a.height || 0) - (b.height || 0));
+
+      const preferredPreview =
+        progressiveVideos.find((f: { height?: number }) => (f.height || 0) >= 360 && (f.height || 0) <= 720) ||
+        progressiveVideos[progressiveVideos.length - 1] ||
+        null;
+
+      videoStreamUrl = preferredPreview?.url || null;
+      audioStreamUrl = audioCandidates[0]?.url || videoStreamUrl || (typeof data.url === 'string' ? data.url : null);
+    } else if (typeof data.url === 'string') {
+      audioStreamUrl = data.url;
+      videoStreamUrl = data.url;
+    }
+
     return {
       id: String(data.id || Date.now()),
       title: String(data.title || 'Untitled Media'),
@@ -138,10 +181,90 @@ export class MediaEngine {
       extractor: String(data.extractor_key || data.extractor || 'Media'),
       isPlaylist,
       playlistCount: isPlaylist ? data.entries.length : undefined,
+      audioStreamUrl,
+      videoStreamUrl,
       videoQualities,
       audioQualities,
       subtitles: Array.from(subLangs).slice(0, 15),
     };
+  }
+
+  async extractWaveform(audioUrl: string, bars = 280): Promise<number[]> {
+    const ffmpeg = resolveBinary('ffmpeg.exe');
+    if (!ffmpeg || !audioUrl) return [];
+
+    return new Promise<number[]>((resolve) => {
+      const args = [
+        '-v',
+        'error',
+        '-t',
+        '1800',
+        '-i',
+        audioUrl,
+        '-vn',
+        '-ac',
+        '1',
+        '-ar',
+        '800',
+        '-f',
+        's16le',
+        'pipe:1',
+      ];
+
+      const child = spawn(ffmpeg, args, { windowsHide: true });
+      const chunks: Buffer[] = [];
+      let done = false;
+
+      const finish = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        const buf = Buffer.concat(chunks);
+        const sampleCount = Math.floor(buf.length / 2);
+        if (sampleCount < 10) {
+          resolve([]);
+          return;
+        }
+
+        const bucketSize = Math.max(1, Math.floor(sampleCount / bars));
+        const rawPeaks: number[] = [];
+        let maxPeak = 1;
+
+        for (let b = 0; b < bars; b++) {
+          const start = b * bucketSize;
+          const end = Math.min(sampleCount, start + bucketSize);
+          let peak = 0;
+          for (let i = start; i < end; i++) {
+            const val = Math.abs(buf.readInt16LE(i * 2));
+            if (val > peak) peak = val;
+          }
+          rawPeaks.push(peak);
+          if (peak > maxPeak) maxPeak = peak;
+        }
+
+        const normalized = rawPeaks.map((p) => Number((p / maxPeak).toFixed(3)));
+        resolve(normalized);
+      };
+
+      const timer = setTimeout(() => {
+        try {
+          child.kill();
+        } catch {
+          // ignore
+        }
+        finish();
+      }, 15000);
+
+      child.stdout.on('data', (c: Buffer) => chunks.push(c));
+      child.on('close', finish);
+      child.on('error', () => {
+        if (!done) {
+          done = true;
+          clearTimeout(timer);
+          resolve([]);
+        }
+      });
+    });
   }
 
   startDownload(

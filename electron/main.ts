@@ -59,15 +59,11 @@ async function broadcastTasks() {
 }
 
 function createTray() {
-  // Simple 16x16 indigo PNG icon via SVG data URL so it never fails if icon file missing
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-    <rect width="32" height="32" rx="8" fill="#6366f1"/>
-    <path d="M16 7v12m0 0l-5-5m5 5l5-5M8 24h16" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  </svg>`;
-  const icon = nativeImage.createFromDataURL(
-    `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
-  );
-  tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  // 16x16 solid indigo PNG icon (Windows Tray requires PNG/ICO, not SVG)
+  const pngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAH0lEQVR42mP8z8Dw/z8DLoCJgYGJgYGBgYHhfwYGhgEA/4ME/e0q1u8AAAAASUVORK5CYII=';
+  const icon = nativeImage.createFromDataURL(`data:image/png;base64,${pngBase64}`);
+  tray = new Tray(icon);
   tray.setToolTip('MazGeter — All-in-One Downloader');
 
   const menu = Menu.buildFromTemplate([
@@ -100,6 +96,7 @@ function createWindow() {
     height: 780,
     minWidth: 980,
     minHeight: 640,
+    show: false,
     frame: false,
     backgroundColor: '#0b0e14',
     titleBarStyle: 'hidden',
@@ -109,6 +106,11 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false,
     },
+  });
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+    mainWindow?.focus();
   });
 
   const devUrl = process.env.VITE_DEV_SERVER_URL || (!app.isPackaged ? 'http://localhost:5173' : '');
@@ -171,6 +173,10 @@ function registerIpc() {
   // Media analysis (XGetter)
   ipcMain.handle('media:analyze', async (_e, url: string) => {
     return media.analyzeUrl(url);
+  });
+
+  ipcMain.handle('media:waveform', async (_e, audioUrl: string, bars?: number) => {
+    return media.extractWaveform(audioUrl, bars);
   });
 
   // Add tasks

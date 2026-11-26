@@ -26,6 +26,11 @@ import {
 let mainWindow: BrowserWindow | null = null;
 let pollTimer: NodeJS.Timeout | null = null;
 
+app.setName('MazGeter');
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.akaized.mazgeter');
+}
+
 // Enforce Single Instance: only 1 MazGeter session at a time
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {

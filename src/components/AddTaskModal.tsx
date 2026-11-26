@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ClipboardPaste,
   Download,
@@ -50,6 +50,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   const [trimEndSec, setTrimEndSec] = useState(60);
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const [loadingPeaks, setLoadingPeaks] = useState(false);
+  const scannedWaveForRef = useRef<string | null>(null);
 
   // Direct/Torrent mode state (Motrix)
   const [customFileName, setCustomFileName] = useState('');
@@ -72,11 +73,14 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   // Automatically extract real audio waveform peaks when link is analyzed & trimmer is visible
   useEffect(() => {
     const waveUrl = mediaInfo?.waveformAudioUrl || mediaInfo?.audioStreamUrl;
-    if (!open || !waveUrl || waveformPeaks.length > 0 || loadingPeaks) return;
-    if (!trimmerVisible) return;
+    const scanKey = mediaInfo ? `${mediaInfo.id}:${waveUrl || ''}` : null;
+    if (!open || !waveUrl || !scanKey || !trimmerVisible) return;
+    if (scannedWaveForRef.current === scanKey) return;
 
+    scannedWaveForRef.current = scanKey;
     let cancelled = false;
     setLoadingPeaks(true);
+
     window.mazgeter
       ?.extractWaveform(waveUrl, 260, mediaInfo?.waveformFilesize)
       .then((peaks) => {
@@ -92,7 +96,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [open, mediaInfo, trimmerVisible, waveformPeaks.length, loadingPeaks]);
+  }, [open, mediaInfo, trimmerVisible]);
 
   if (!open) return null;
 
@@ -124,6 +128,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     setAnalyzing(true);
     setMediaInfo(null);
     setWaveformPeaks([]);
+    scannedWaveForRef.current = null;
     try {
       const info = await window.mazgeter!.analyzeMedia(url);
       setMediaInfo(info);

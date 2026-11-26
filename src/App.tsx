@@ -88,6 +88,19 @@ export default function App() {
           {activeTab === 'settings' && (
             <SettingsView settings={settings} onSettingsUpdated={setSettings} />
           )}
+
+          {/* Minimalist App Footer */}
+          <footer className="px-6 py-2.5 border-t border-white/[0.06] bg-[#0b0e14] flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+            <span>© 2026 MazGeter • Developed by Nguyễn Đình Mạnh</span>
+            <button
+              type="button"
+              onClick={() => window.mazgeter?.openExternal('https://mazdownloader.vercel.app')}
+              className="font-mono text-slate-400 hover:text-indigo-300 transition-colors cursor-pointer"
+              title="Mở trang chủ mazdownloader.vercel.app"
+            >
+              mazdownloader.vercel.app
+            </button>
+          </footer>
         </main>
       </div>
     </div>

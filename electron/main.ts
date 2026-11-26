@@ -261,6 +261,12 @@ function registerIpc() {
     }
   });
 
+  ipcMain.handle('shell:openExternal', async (_e, url: string) => {
+    if (url && /^https?:\/\//i.test(url)) {
+      await shell.openExternal(url);
+    }
+  });
+
   ipcMain.handle('tasks:refresh', async () => {
     await broadcastTasks();
   });

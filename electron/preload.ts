@@ -51,6 +51,7 @@ const api = {
   clearCompleted: (): Promise<void> => ipcRenderer.invoke('task:clearCompleted'),
   openFolder: (targetPath: string): Promise<void> => ipcRenderer.invoke('task:openFolder', targetPath),
   openFile: (filePath: string): Promise<void> => ipcRenderer.invoke('task:openFile', filePath),
+  openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url),
   refreshTasks: (): Promise<void> => ipcRenderer.invoke('tasks:refresh'),
 
   // Events

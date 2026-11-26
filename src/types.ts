@@ -156,6 +156,7 @@ export interface MazGeterAPI {
   clearCompleted: () => Promise<void>;
   openFolder: (targetPath: string) => Promise<void>;
   openFile: (filePath: string) => Promise<void>;
+  openExternal: (url: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
   onTasksUpdate: (cb: (data: { tasks: DownloadTask[]; stats: GlobalStats }) => void) => () => void;
   runMediaTool: (payload: MediaToolPayload) => Promise<string>;

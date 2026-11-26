@@ -8,10 +8,13 @@ import {
   Globe,
   Loader2,
   Magnet,
+  Maximize2,
+  Minimize2,
   Music,
   Scissors,
   Search,
   Sparkles,
+  Square,
   X,
 } from 'lucide-react';
 import { AppSettings, MediaInfo } from '../types';
@@ -40,11 +43,15 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   // Media mode state (XGetter + Waveform Trimmer)
   const [analyzing, setAnalyzing] = useState(false);
+  const [autoCountdown, setAutoCountdown] = useState<number | null>(null);
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null);
   const [mediaFormat, setMediaFormat] = useState<'mp4' | 'mkv' | 'mp3' | 'm4a' | 'wav'>('mp4');
   const [quality, setQuality] = useState('1080');
+  const analyzeRequestIdRef = useRef(0);
+  const skipAutoUrlRef = useRef<string | null>(null);
 
   // Trimmer state
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [showVideoTrimmer, setShowVideoTrimmer] = useState(false);
   const [trimStartSec, setTrimStartSec] = useState(0);
   const [trimEndSec, setTrimEndSec] = useState(60);
@@ -82,7 +89,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     setLoadingPeaks(true);
 
     window.mazgeter
-      ?.extractWaveform(waveUrl, 260, mediaInfo?.waveformFilesize)
+      ?.extractWaveform(waveUrl, 8000, mediaInfo?.waveformFilesize)
       .then((peaks) => {
         if (!cancelled && Array.isArray(peaks) && peaks.length > 0) {
           setWaveformPeaks(peaks);
@@ -98,12 +105,11 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     };
   }, [open, mediaInfo, trimmerVisible]);
 
-  if (!open) return null;
-
   const handlePaste = async () => {
     try {
       const text = (await window.mazgeter?.readClipboard()) || '';
       if (!text.trim()) return;
+      skipAutoUrlRef.current = null;
       setUrlInput(text.trim());
       setError(null);
       const detected = detectUrlType(text.trim());
@@ -118,12 +124,16 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     if (dir) setSaveDir(dir);
   };
 
-  const handleAnalyze = async () => {
-    const url = urlInput.trim();
+  const handleAnalyze = async (overrideUrl?: string) => {
+    const url = (overrideUrl ?? urlInput).trim();
     if (!url) {
       setError('Vui lòng dán đường dẫn video/media.');
       return;
     }
+    setAutoCountdown(null);
+    skipAutoUrlRef.current = url;
+    const reqId = ++analyzeRequestIdRef.current;
+
     setError(null);
     setAnalyzing(true);
     setMediaInfo(null);
@@ -131,6 +141,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     scannedWaveForRef.current = null;
     try {
       const info = await window.mazgeter!.analyzeMedia(url);
+      if (analyzeRequestIdRef.current !== reqId) return;
       setMediaInfo(info);
       const dur = info.duration || 60;
       setTrimStartSec(0);
@@ -139,11 +150,56 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
         setQuality(info.videoQualities[1]?.value || info.videoQualities[0].value);
       }
     } catch (err: unknown) {
+      if (analyzeRequestIdRef.current !== reqId) return;
       setError(err instanceof Error ? err.message : 'Không thể phân tích liên kết.');
     } finally {
-      setAnalyzing(false);
+      if (analyzeRequestIdRef.current === reqId) {
+        setAnalyzing(false);
+      }
     }
   };
+
+  const handleStopAnalyze = () => {
+    analyzeRequestIdRef.current += 1;
+    skipAutoUrlRef.current = urlInput.trim();
+    setAnalyzing(false);
+    setAutoCountdown(null);
+  };
+
+  // Auto-analyze 3s after pasting/entering a valid media URL (unless user runs or stops it)
+  useEffect(() => {
+    const trimmed = urlInput.trim();
+    if (!open || mode !== 'media' || analyzing) {
+      setAutoCountdown(null);
+      return;
+    }
+    if (!/^https?:\/\/\S+/i.test(trimmed) || skipAutoUrlRef.current === trimmed) {
+      setAutoCountdown(null);
+      return;
+    }
+
+    setAutoCountdown(3);
+    const interval = window.setInterval(() => {
+      setAutoCountdown((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          window.clearInterval(interval);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    const timer = window.setTimeout(() => {
+      window.clearInterval(interval);
+      void handleAnalyze(trimmed);
+    }, 3000);
+
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(timer);
+    };
+  }, [open, mode, urlInput, analyzing]);
 
   const handleAddTorrentFile = async () => {
     const file = await window.mazgeter?.selectFile([
@@ -217,25 +273,49 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     }
   };
 
+  if (!open) return null;
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div
+      className={`fixed top-10 inset-x-0 bottom-0 z-40 bg-black/75 backdrop-blur-sm flex items-center justify-center ${
+        isFullscreen ? 'p-0' : 'p-4'
+      }`}
+    >
       <div
         className={`w-full ${
-          trimmerVisible ? 'max-w-3xl' : 'max-w-2xl'
-        } bg-[#131926] border border-white/[0.09] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] transition-all duration-200`}
+          isFullscreen
+            ? 'h-full max-w-none max-h-none rounded-none border-0'
+            : `${trimmerVisible ? 'max-w-4xl' : 'max-w-2xl'} rounded-2xl max-h-[calc(100vh-5.5rem)] border border-white/[0.09]`
+        } bg-[#131926] shadow-2xl overflow-hidden flex flex-col transition-all duration-200`}
       >
         {/* Header */}
-        <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <Sparkles className="w-5 h-5 text-indigo-400" />
             <h2 className="text-base font-semibold text-white">Tạo tác vụ tải xuống</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setIsFullscreen((v) => !v)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+              title={isFullscreen ? 'Thu gọn khung nhập' : 'Mở rộng toàn khung để căn chỉnh dễ hơn'}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+              title="Đóng"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Mode Switcher */}
@@ -291,24 +371,42 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                 <input
                   type="text"
                   value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
-                  placeholder="https://www.youtube.com/watch?v=..."
+                  onChange={(e) => {
+                    skipAutoUrlRef.current = null;
+                    setUrlInput(e.target.value);
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && !analyzing && handleAnalyze()}
+                  placeholder="Dán link video, nhạc hoặc playlist (YouTube, TikTok, Facebook...)..."
                   className="flex-1 bg-[#0b0e14] border border-white/[0.08] focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none"
                 />
-                <button
-                  type="button"
-                  onClick={handleAnalyze}
-                  disabled={analyzing}
-                  className="px-4 py-2.5 rounded-xl bg-white/[0.07] hover:bg-white/[0.12] border border-white/[0.08] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  {analyzing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
+                {analyzing ? (
+                  <button
+                    type="button"
+                    onClick={handleStopAnalyze}
+                    className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 text-xs font-semibold text-rose-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Dừng phân tích"
+                  >
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Square className="w-3 h-3 fill-current" />
+                    <span>Dừng</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleAnalyze()}
+                    className="px-4 py-2.5 rounded-xl bg-white/[0.07] hover:bg-white/[0.12] border border-white/[0.08] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title={
+                      autoCountdown !== null
+                        ? `Tự động phân tích sau ${autoCountdown}s (bấm để chạy ngay)`
+                        : 'Phân tích liên kết'
+                    }
+                  >
                     <Search className="w-4 h-4" />
-                  )}
-                  <span>Phân tích</span>
-                </button>
+                    <span>
+                      {autoCountdown !== null ? `Phân tích (${autoCountdown}s)` : 'Phân tích'}
+                    </span>
+                  </button>
+                )}
               </div>
             ) : (
               <textarea
@@ -464,6 +562,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                   thumbnail={mediaInfo?.thumbnail}
                   peaks={waveformPeaks}
                   loadingPeaks={loadingPeaks}
+                  expanded={isFullscreen}
                   startSec={trimStartSec}
                   endSec={trimEndSec}
                   onChangeRange={(s, e) => {

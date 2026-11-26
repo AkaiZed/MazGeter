@@ -94,11 +94,11 @@ export default function App() {
             <span>© 2026 MazGeter • Developed by Nguyễn Đình Mạnh</span>
             <button
               type="button"
-              onClick={() => window.mazgeter?.openExternal('https://mazdownloader.vercel.app')}
+              onClick={() => window.mazgeter?.openExternal('https://ndmanh.vercel.app')}
               className="font-mono text-slate-400 hover:text-indigo-300 transition-colors cursor-pointer"
-              title="Mở trang chủ mazdownloader.vercel.app"
+              title="Mở trang chủ ndmanh.vercel.app"
             >
-              mazdownloader.vercel.app
+              ndmanh.vercel.app
             </button>
           </footer>
         </main>

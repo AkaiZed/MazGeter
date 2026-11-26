@@ -405,12 +405,9 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
     };
 
     const trackEl = trackRef.current;
-    const videoEl = videoAreaRef.current;
     trackEl?.addEventListener('wheel', onNativeWheel, { passive: false });
-    videoEl?.addEventListener('wheel', onNativeWheel, { passive: false });
     return () => {
       trackEl?.removeEventListener('wheel', onNativeWheel);
-      videoEl?.removeEventListener('wheel', onNativeWheel);
     };
   }, [mode, expanded]);
 
@@ -728,7 +725,6 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
           className={`relative bg-black/85 flex items-center justify-center ${
             expanded ? 'h-[48vh] min-h-[340px] max-h-[560px]' : 'h-48'
           } border-b border-white/[0.06] overflow-hidden group transition-[height] duration-300 ease-out`}
-          title="Cuộn con lăn chuột ở đây để phóng to trục thời gian"
         >
           {videoUrl ? (
             <video
@@ -752,9 +748,9 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
             </div>
           )}
 
-          {/* Subtle zoom hint overlay */}
-          <div className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 rounded-md bg-black/70 backdrop-blur text-[10.5px] text-cyan-300 border border-white/10 pointer-events-none">
-            {formatPreciseTime(playhead)} • Lăn chuột để zoom ({zoom.toFixed(1)}x)
+          {/* Clean playhead timestamp badge */}
+          <div className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 rounded-md bg-black/70 backdrop-blur text-[10.5px] font-mono text-cyan-300 border border-white/10 pointer-events-none">
+            {formatPreciseTime(playhead)}
           </div>
         </div>
       )}

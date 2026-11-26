@@ -140,22 +140,40 @@ export class MediaEngine {
           (!f.protocol || f.protocol === 'https' || f.protocol === 'http')
       );
 
-      // Audio-only streams
-      const audioOnly = httpFormats.filter(
+      // Audio-only streams — ALWAYS prefer original/default track (avoid YouTube AI auto-dub tracks!)
+      const allAudioOnly = httpFormats.filter(
         (f: { acodec?: string; vcodec?: string }) =>
           f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none')
       );
 
+      const originalAudioOnly = allAudioOnly.filter(
+        (f: { language_preference?: number; format_note?: string }) => {
+          const note = (f.format_note || '').toLowerCase();
+          return (
+            (typeof f.language_preference === 'number' && f.language_preference > 0) ||
+            note.includes('original') ||
+            note.includes('default')
+          );
+        }
+      );
+
+      const audioOnly = originalAudioOnly.length > 0 ? originalAudioOnly : allAudioOnly;
+
       // Best playable audio-only stream (prefer m4a/mp4 for HTML5 <audio> playback)
       const audioCandidates = [...audioOnly].sort(
-        (a: { abr?: number; ext?: string }, b: { abr?: number; ext?: string }) => {
+        (
+          a: { abr?: number; ext?: string; language_preference?: number },
+          b: { abr?: number; ext?: string; language_preference?: number }
+        ) => {
+          const prefDiff = (b.language_preference || 0) - (a.language_preference || 0);
+          if (prefDiff !== 0) return prefDiff;
           const scoreA = (a.ext === 'm4a' ? 500 : 0) + (a.abr || 0);
           const scoreB = (b.ext === 'm4a' ? 500 : 0) + (b.abr || 0);
           return scoreB - scoreA;
         }
       );
 
-      // Smallest / lowest-bitrate audio-only stream for ultra-fast waveform scan (~30-50kbps)
+      // Smallest / lowest-bitrate ORIGINAL audio-only stream for ultra-fast waveform scan (~48kbps)
       const smallestAudio = [...audioOnly].sort(
         (
           a: { abr?: number; filesize?: number; filesize_approx?: number },
@@ -281,7 +299,7 @@ export class MediaEngine {
         '-ac',
         '1',
         '-ar',
-        '400',
+        '8000',
         '-f',
         's16le',
         'pipe:1',
@@ -303,22 +321,27 @@ export class MediaEngine {
         }
 
         const bucketSize = Math.max(1, Math.floor(sampleCount / bars));
-        const rawPeaks: number[] = [];
-        let maxPeak = 1;
+        const rawVals: number[] = [];
+        let maxVal = 1;
 
         for (let b = 0; b < bars; b++) {
           const start = b * bucketSize;
           const end = Math.min(sampleCount, start + bucketSize);
-          let peak = 0;
-          for (let i = start; i < end; i++) {
-            const val = Math.abs(buf.readInt16LE(i * 2));
-            if (val > peak) peak = val;
+          let sumSq = 0;
+          let count = 0;
+          // Sample stride for speed while preserving accurate speech RMS envelope
+          const step = Math.max(1, Math.floor((end - start) / 400));
+          for (let i = start; i < end; i += step) {
+            const val = buf.readInt16LE(i * 2);
+            sumSq += val * val;
+            count++;
           }
-          rawPeaks.push(peak);
-          if (peak > maxPeak) maxPeak = peak;
+          const rms = count > 0 ? Math.sqrt(sumSq / count) : 0;
+          rawVals.push(rms);
+          if (rms > maxVal) maxVal = rms;
         }
 
-        const normalized = rawPeaks.map((p) => Number((p / maxPeak).toFixed(3)));
+        const normalized = rawVals.map((p) => Number(Math.min(1, Math.pow(p / maxVal, 0.75)).toFixed(3)));
         resolve(normalized);
       };
 

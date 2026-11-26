@@ -145,7 +145,7 @@ export interface MazGeterAPI {
   selectFolder: () => Promise<string | null>;
   selectFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>;
   readClipboard: () => Promise<string>;
-  analyzeMedia: (url: string) => Promise<MediaInfo>;
+  analyzeMedia: (url: string, allowPlaylist?: boolean) => Promise<MediaInfo>;
   extractWaveform: (audioUrl: string, bars?: number, filesize?: number | null) => Promise<number[]>;
   addMediaTask: (payload: AddMediaTaskPayload) => Promise<DownloadTask>;
   addAria2Task: (payload: AddAria2TaskPayload) => Promise<string>;

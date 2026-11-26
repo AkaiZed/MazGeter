@@ -30,7 +30,8 @@ const api = {
   readClipboard: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
 
   // Media Analysis & Downloads
-  analyzeMedia: (url: string): Promise<MediaInfo> => ipcRenderer.invoke('media:analyze', url),
+  analyzeMedia: (url: string, allowPlaylist?: boolean): Promise<MediaInfo> =>
+    ipcRenderer.invoke('media:analyze', url, allowPlaylist),
   extractWaveform: (audioUrl: string, bars?: number, filesize?: number | null): Promise<number[]> =>
     ipcRenderer.invoke('media:waveform', audioUrl, bars, filesize),
   addMediaTask: (payload: AddMediaTaskPayload): Promise<DownloadTask> =>

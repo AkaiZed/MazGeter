@@ -39,7 +39,7 @@ export class MediaEngine {
     return Array.from(this.activeTasks.values());
   }
 
-  async analyzeUrl(url: string): Promise<MediaInfo> {
+  async analyzeUrl(url: string, allowPlaylist = false): Promise<MediaInfo> {
     const ytDlp = resolveBinary('yt-dlp.exe');
     if (!ytDlp) {
       throw new Error('Không tìm thấy yt-dlp.exe trên hệ thống.');
@@ -50,7 +50,7 @@ export class MediaEngine {
       '--no-warnings',
       '--skip-download',
       '--no-check-certificates',
-      '--flat-playlist',
+      allowPlaylist ? '--flat-playlist' : '--no-playlist',
       url,
     ];
 

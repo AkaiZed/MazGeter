@@ -172,9 +172,9 @@ function registerIpc() {
 
   ipcMain.handle('clipboard:read', () => clipboard.readText());
 
-  // Media analysis (XGetter)
-  ipcMain.handle('media:analyze', async (_e, url: string) => {
-    return media.analyzeUrl(url);
+  // Media analysis
+  ipcMain.handle('media:analyze', async (_e, url: string, allowPlaylist?: boolean) => {
+    return media.analyzeUrl(url, Boolean(allowPlaylist));
   });
 
   ipcMain.handle('media:waveform', async (_e, audioUrl: string, bars?: number, filesize?: number | null) => {

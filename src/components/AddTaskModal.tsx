@@ -8,8 +8,8 @@ import {
   Globe,
   Loader2,
   Magnet,
-  Maximize2,
-  Minimize2,
+  Maximize,
+  Minimize,
   Music,
   Scissors,
   Search,
@@ -41,8 +41,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   const [saveDir, setSaveDir] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Media mode state (XGetter + Waveform Trimmer)
+  // Media mode state
   const [analyzing, setAnalyzing] = useState(false);
+  const [downloadPlaylist, setDownloadPlaylist] = useState(false);
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null);
   const [mediaFormat, setMediaFormat] = useState<'mp4' | 'mkv' | 'mp3' | 'm4a' | 'wav'>('mp4');
   const [quality, setQuality] = useState('1080');
@@ -74,7 +75,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   const isAudioFormat = ['mp3', 'm4a', 'wav'].includes(mediaFormat);
   const hasAnalyzedMedia = Boolean(mediaInfo);
-  const trimmerVisible = mode === 'media' && hasAnalyzedMedia && showDetailTrimmer;
+  const isPlaylistMode = downloadPlaylist || Boolean(mediaInfo?.isPlaylist);
+  const trimmerVisible = mode === 'media' && hasAnalyzedMedia && !isPlaylistMode && showDetailTrimmer;
   const totalDuration = mediaInfo?.duration || 60;
 
   // Automatically extract real audio waveform peaks when link is analyzed & trimmer is visible
@@ -124,13 +126,14 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     if (dir) setSaveDir(dir);
   };
 
-  const handleAnalyze = async (overrideUrl?: string) => {
+  const handleAnalyze = async (overrideUrl?: string, overridePlaylist?: boolean) => {
     const url = (overrideUrl ?? urlInput).trim();
+    const usePlaylist = overridePlaylist ?? downloadPlaylist;
     if (!url) {
       setError('Vui lòng dán đường dẫn video/media.');
       return;
     }
-    skipAutoUrlRef.current = url;
+    skipAutoUrlRef.current = `${url}::${usePlaylist ? 'pl' : 'one'}`;
     const reqId = ++analyzeRequestIdRef.current;
 
     setError(null);
@@ -138,14 +141,20 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     setMediaInfo(null);
     setWaveformPeaks([]);
     scannedWaveForRef.current = null;
+    if (usePlaylist) {
+      setShowDetailTrimmer(false);
+    }
     try {
-      const info = await window.mazgeter!.analyzeMedia(url);
+      const info = await window.mazgeter!.analyzeMedia(url, usePlaylist);
       if (analyzeRequestIdRef.current !== reqId) return;
       setMediaInfo(info);
       const dur = info.duration || 60;
       setTrimStartSec(0);
       setTrimEndSec(dur);
       setVolumePercent(100);
+      if (info.isPlaylist) {
+        setShowDetailTrimmer(false);
+      }
       if (info.videoQualities.length > 0 && !isAudioFormat) {
         setQuality(info.videoQualities[1]?.value || info.videoQualities[0].value);
       }
@@ -161,24 +170,25 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   const handleStopAnalyze = () => {
     analyzeRequestIdRef.current += 1;
-    skipAutoUrlRef.current = urlInput.trim();
+    skipAutoUrlRef.current = `${urlInput.trim()}::${downloadPlaylist ? 'pl' : 'one'}`;
     setAnalyzing(false);
   };
 
-  // Instant auto-analyze as soon as a valid media URL is entered/pasted (user can click Dừng anytime)
+  // Instant auto-analyze as soon as a valid media URL is entered/pasted or playlist switch changes
   useEffect(() => {
     const trimmed = urlInput.trim();
+    const key = `${trimmed}::${downloadPlaylist ? 'pl' : 'one'}`;
     if (!open || mode !== 'media' || analyzing) return;
-    if (!/^https?:\/\/\S+/i.test(trimmed) || skipAutoUrlRef.current === trimmed) return;
+    if (!/^https?:\/\/\S+/i.test(trimmed) || skipAutoUrlRef.current === key) return;
 
     const timer = window.setTimeout(() => {
-      void handleAnalyze(trimmed);
+      void handleAnalyze(trimmed, downloadPlaylist);
     }, 180);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [open, mode, urlInput, analyzing]);
+  }, [open, mode, urlInput, downloadPlaylist, analyzing]);
 
   const handleAddTorrentFile = async () => {
     const file = await window.mazgeter?.selectFile([
@@ -222,7 +232,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
           trimStart: isTrimmed ? formatPreciseTime(trimStartSec) : undefined,
           trimEnd: isTrimmed ? formatPreciseTime(trimEndSec) : undefined,
           volumePercent: trimmerVisible && volumePercent !== 100 ? volumePercent : undefined,
-          isPlaylist: mediaInfo?.isPlaylist,
+          isPlaylist: downloadPlaylist || Boolean(mediaInfo?.isPlaylist),
         });
       } else {
         const lines = raw
@@ -287,9 +297,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
               title={isFullscreen ? 'Thu nhỏ' : 'Mở rộng toàn khung'}
             >
               {isFullscreen ? (
-                <Minimize2 className="w-4 h-4" />
+                <Minimize className="w-4 h-4" />
               ) : (
-                <Maximize2 className="w-4 h-4" />
+                <Maximize className="w-4 h-4" />
               )}
             </button>
             <button
@@ -341,14 +351,49 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                   ? 'Đường dẫn Video / Playlist (YouTube, TikTok, Facebook, Bilibili...)'
                   : 'Đường dẫn tải trực tiếp (HTTP/HTTPS/FTP/Magnet — mỗi dòng 1 link)'}
               </label>
-              <button
-                type="button"
-                onClick={handlePaste}
-                className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
-              >
-                <ClipboardPaste className="w-3.5 h-3.5" />
-                Dán link
-              </button>
+              {mode === 'media' ? (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={downloadPlaylist}
+                  onClick={() => {
+                    skipAutoUrlRef.current = null;
+                    setDownloadPlaylist((v) => !v);
+                  }}
+                  className="flex items-center gap-2 text-xs cursor-pointer group"
+                  title="Tắt: chỉ tải 1 video đang dán • Bật: tải toàn bộ danh sách phát (Playlist)"
+                >
+                  <span
+                    className={`font-medium transition-colors ${
+                      downloadPlaylist ? 'text-amber-300' : 'text-slate-400 group-hover:text-slate-200'
+                    }`}
+                  >
+                    {downloadPlaylist ? 'Tải full danh sách' : 'Chỉ tải 1 video'}
+                  </span>
+                  <span
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      downloadPlaylist
+                        ? 'bg-amber-500/80 border border-amber-400/60'
+                        : 'bg-white/[0.1] border border-white/[0.12]'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform duration-200 ${
+                        downloadPlaylist ? 'translate-x-4.5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handlePaste}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <ClipboardPaste className="w-3.5 h-3.5" />
+                  Dán link
+                </button>
+              )}
             </div>
 
             {mode === 'media' ? (
@@ -505,8 +550,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                 </div>
               </div>
 
-              {/* Unified Detail Toggle for BOTH MP3/Audio & MP4/Video — shown after link is analyzed */}
-              {hasAnalyzedMedia && (
+              {/* Unified Detail Toggle for BOTH MP3/Audio & MP4/Video — hidden in full-playlist mode */}
+              {hasAnalyzedMedia && !isPlaylistMode && (
                 <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#0b0e14] border border-white/[0.06]">
                   <button
                     type="button"

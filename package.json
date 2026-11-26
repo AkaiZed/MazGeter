@@ -1,6 +1,6 @@
 {
   "name": "mazgeter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MazGeter — All-in-One Desktop Download Manager & Media Studio for Windows",
   "main": "dist-electron/main.js",
   "author": "AkaiZed",
@@ -72,7 +72,7 @@
           ]
         },
         {
-          "target": "portable",
+          "target": "zip",
           "arch": [
             "x64"
           ]
@@ -81,8 +81,13 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MazGeter",
+      "uninstallDisplayName": "MazGeter",
+      "artifactName": "MazGeter-Setup-${version}.exe"
     }
   }
 }

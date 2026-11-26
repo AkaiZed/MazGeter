@@ -8,32 +8,31 @@ import {
   Globe,
   Loader2,
   Magnet,
-  Maximize,
-  Minimize,
   Music,
+  PanelLeftClose,
+  PanelLeftOpen,
   Scissors,
   Search,
   Sparkles,
   Square,
-  X,
 } from 'lucide-react';
 import { AppSettings, MediaInfo } from '../types';
 import { detectUrlType } from '../utils';
 import { formatPreciseTime, TimelineTrimmer } from './TimelineTrimmer';
 
 interface AddTaskModalProps {
-  open: boolean;
-  onClose: () => void;
   settings: AppSettings | null;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
   onTaskCreated: () => void;
 }
 
 type ModalMode = 'media' | 'direct';
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({
-  open,
-  onClose,
   settings,
+  sidebarOpen,
+  onToggleSidebar,
   onTaskCreated,
 }) => {
   const [mode, setMode] = useState<ModalMode>('media');
@@ -52,7 +51,6 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   const skipAutoUrlRef = useRef<string | null>(null);
 
   // Trimmer state
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDetailTrimmer, setShowDetailTrimmer] = useState(false);
   const [trimStartSec, setTrimStartSec] = useState(0);
   const [trimEndSec, setTrimEndSec] = useState(60);
@@ -66,12 +64,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setSaveDir(settings?.downloadDir || '');
-      setSplitThreads(settings?.aria2Split || 16);
-      setError(null);
-    }
-  }, [open, settings]);
+    setSaveDir((prev) => prev || settings?.downloadDir || '');
+    setSplitThreads(settings?.aria2Split || 16);
+  }, [settings]);
 
   const isAudioFormat = ['mp3', 'm4a', 'wav'].includes(mediaFormat);
   const hasAnalyzedMedia = Boolean(mediaInfo);
@@ -83,7 +78,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   useEffect(() => {
     const waveUrl = mediaInfo?.waveformAudioUrl || mediaInfo?.audioStreamUrl;
     const scanKey = mediaInfo ? `${mediaInfo.id}:${waveUrl || ''}` : null;
-    if (!open || !waveUrl || !scanKey || !trimmerVisible) return;
+    if (!waveUrl || !scanKey || !trimmerVisible) return;
     if (scannedWaveForRef.current === scanKey) return;
 
     scannedWaveForRef.current = scanKey;
@@ -105,7 +100,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [open, mediaInfo, trimmerVisible]);
+  }, [mediaInfo, trimmerVisible]);
 
   const handlePaste = async () => {
     try {
@@ -178,7 +173,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   useEffect(() => {
     const trimmed = urlInput.trim();
     const key = `${trimmed}::${downloadPlaylist ? 'pl' : 'one'}`;
-    if (!open || mode !== 'media' || analyzing) return;
+    if (mode !== 'media' || analyzing) return;
     if (!/^https?:\/\/\S+/i.test(trimmed) || skipAutoUrlRef.current === key) return;
 
     const timer = window.setTimeout(() => {
@@ -188,7 +183,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [open, mode, urlInput, downloadPlaylist, analyzing]);
+  }, [mode, urlInput, downloadPlaylist, analyzing]);
 
   const handleAddTorrentFile = async () => {
     const file = await window.mazgeter?.selectFile([
@@ -200,7 +195,6 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     try {
       await window.mazgeter!.addTorrentTask(file, saveDir || undefined);
       onTaskCreated();
-      onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Không thể thêm file torrent.');
     } finally {
@@ -254,9 +248,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
       setWaveformPeaks([]);
       setCustomFileName('');
       setShowDetailTrimmer(false);
-      setIsFullscreen(false);
       onTaskCreated();
-      onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Không thể bắt đầu tải xuống.');
     } finally {
@@ -264,54 +256,43 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     }
   };
 
-  if (!open) return null;
-
   return (
-    <div
-      className={`fixed top-10 inset-x-0 bottom-0 z-40 bg-black/75 backdrop-blur-md flex items-center justify-center transition-all duration-300 ease-out ${
-        isFullscreen ? 'p-0' : 'p-4'
-      }`}
-    >
-      <div
-        className={`w-full ${
-          isFullscreen
-            ? 'h-full max-w-none max-h-none rounded-none border-0 shadow-none scale-100'
-            : `${trimmerVisible ? 'max-w-4xl' : 'max-w-2xl'} rounded-2xl max-h-[calc(100vh-5.5rem)] border border-white/[0.09] shadow-2xl scale-100`
-        } bg-[#131926] overflow-hidden flex flex-col transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]`}
-      >
-        {/* Header */}
-        <div className="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <Sparkles className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-base font-semibold text-white">Tạo tác vụ tải xuống</h2>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setIsFullscreen((v) => !v)}
-              className={`p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
-                isFullscreen
-                  ? 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25'
-                  : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
-              }`}
-              title={isFullscreen ? 'Thu nhỏ' : 'Mở rộng toàn khung'}
-            >
-              {isFullscreen ? (
-                <Minimize className="w-4 h-4" />
-              ) : (
-                <Maximize className="w-4 h-4" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
-              title="Đóng"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+    <div className="flex-1 flex flex-col min-h-0 bg-[#0b0e14] overflow-hidden">
+      {/* Header */}
+      <div className="px-6 py-3.5 border-b border-white/[0.06] flex items-center justify-between shrink-0 bg-[#0d111a]/60">
+        <div className="flex items-center gap-2.5">
+          <Sparkles className="w-5 h-5 text-indigo-400" />
+          <h1 className="text-base font-bold text-white">Tạo tác vụ tải xuống</h1>
         </div>
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className={`p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
+            !sidebarOpen
+              ? 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25'
+              : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
+          }`}
+          title={sidebarOpen ? 'Ẩn thanh bên để mở rộng không gian' : 'Hiện thanh bên'}
+        >
+          {sidebarOpen ? (
+            <PanelLeftClose className="w-4 h-4" />
+          ) : (
+            <PanelLeftOpen className="w-4 h-4" />
+          )}
+        </button>
+      </div>
+
+      {/* Main Scrollable Content */}
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div
+          className={`mx-auto w-full ${
+            trimmerVisible && !sidebarOpen
+              ? 'max-w-6xl'
+              : trimmerVisible
+              ? 'max-w-4xl'
+              : 'max-w-3xl'
+          } rounded-2xl bg-[#111724] border border-white/[0.07] shadow-xl overflow-hidden flex flex-col transition-all duration-300`}
+        >
 
         {/* Mode Switcher */}
         <div className="px-5 pt-4">
@@ -602,7 +583,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                   thumbnail={mediaInfo?.thumbnail}
                   peaks={waveformPeaks}
                   loadingPeaks={loadingPeaks}
-                  expanded={isFullscreen}
+                  expanded={!sidebarOpen}
                   startSec={trimStartSec}
                   endSec={trimEndSec}
                   volumePercent={volumePercent}
@@ -700,13 +681,6 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.05] cursor-pointer"
-            >
-              Hủy
-            </button>
-            <button
-              type="button"
               disabled={submitting}
               onClick={handleStartDownload}
               className={`px-5 py-2 rounded-xl text-xs font-semibold text-white flex items-center gap-2 shadow-lg transition-all disabled:opacity-50 cursor-pointer ${
@@ -724,6 +698,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

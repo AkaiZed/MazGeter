@@ -133,7 +133,7 @@ export interface MediaToolProgress {
   error?: string;
 }
 
-export type NavTab = 'active' | 'waiting' | 'stopped' | 'tools' | 'settings';
+export type NavTab = 'download' | 'queue' | 'stopped' | 'tools' | 'settings';
 
 export interface MazGeterAPI {
   minimize: () => void;

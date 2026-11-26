@@ -16,11 +16,11 @@ const INITIAL_STATS: GlobalStats = {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<NavTab>('active');
+  const [activeTab, setActiveTab] = useState<NavTab>('download');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const [stats, setStats] = useState<GlobalStats>(INITIAL_STATS);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     window.mazgeter?.getSettings().then(setSettings).catch(() => {});
@@ -34,11 +34,10 @@ export default function App() {
   }, []);
 
   const filteredTasks = useMemo(() => {
-    if (activeTab === 'active') {
-      return tasks.filter((t) => t.status === 'active');
-    }
-    if (activeTab === 'waiting') {
-      return tasks.filter((t) => t.status === 'waiting' || t.status === 'paused');
+    if (activeTab === 'queue') {
+      return tasks
+        .filter((t) => t.status === 'active' || t.status === 'waiting' || t.status === 'paused')
+        .sort((a, b) => (a.status === 'active' ? -1 : b.status === 'active' ? 1 : 0));
     }
     if (activeTab === 'stopped') {
       return tasks.filter((t) => t.status === 'complete' || t.status === 'error');
@@ -48,29 +47,33 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0b0e14] text-slate-100 overflow-hidden">
-      <TitleBar />
+      <TitleBar
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
+      />
 
       <div className="flex-1 flex min-h-0">
         <Sidebar
+          open={sidebarOpen}
           activeTab={activeTab}
           onSelectTab={setActiveTab}
-          onOpenNewTask={() => setModalOpen(true)}
           stats={stats}
         />
 
         <main className="flex-1 flex flex-col min-w-0 bg-[#0b0e14]">
-          {activeTab === 'active' && (
-            <TaskList
-              title="Đang tải xuống"
-              tasks={filteredTasks}
-              onOpenNewTask={() => setModalOpen(true)}
+          {activeTab === 'download' && (
+            <AddTaskModal
+              settings={settings}
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
+              onTaskCreated={() => setActiveTab('queue')}
             />
           )}
-          {activeTab === 'waiting' && (
+          {activeTab === 'queue' && (
             <TaskList
-              title="Đang chờ & Tạm dừng"
+              title="Đang tải & Tạm dừng"
               tasks={filteredTasks}
-              onOpenNewTask={() => setModalOpen(true)}
+              onOpenNewTask={() => setActiveTab('download')}
             />
           )}
           {activeTab === 'stopped' && (
@@ -78,7 +81,7 @@ export default function App() {
               title="Đã hoàn thành & Lịch sử"
               tasks={filteredTasks}
               showClearAll
-              onOpenNewTask={() => setModalOpen(true)}
+              onOpenNewTask={() => setActiveTab('download')}
             />
           )}
           {activeTab === 'tools' && <MediaToolsView />}
@@ -87,13 +90,6 @@ export default function App() {
           )}
         </main>
       </div>
-
-      <AddTaskModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        settings={settings}
-        onTaskCreated={() => setActiveTab('active')}
-      />
     </div>
   );
 }

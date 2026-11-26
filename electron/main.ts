@@ -31,10 +31,20 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.akaized.mazgeter');
 }
 
-// Enforce Single Instance: only 1 MazGeter session at a time
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  app.quit();
+// Single Instance with Auto-Replace: launching a new instance closes the old one and starts fresh
+let gotTheLock = app.requestSingleInstanceLock();
+
+async function acquireLockWithReplace(): Promise<boolean> {
+  if (gotTheLock) return true;
+  // Wait briefly for the previous instance's 'second-instance' handler to quit
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 150));
+    if (app.requestSingleInstanceLock()) {
+      gotTheLock = true;
+      return true;
+    }
+  }
+  return false;
 }
 
 const store = new AppStore();
@@ -264,35 +274,39 @@ function registerIpc() {
   });
 }
 
-if (gotTheLock) {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
+app.on('second-instance', () => {
+  // Automatically close the running instance so the newly launched build takes over cleanly
+  if (pollTimer) clearInterval(pollTimer);
+  media.stopAll();
+  aria2.stop();
+  app.exit(0);
+});
+
+app.whenReady().then(async () => {
+  const locked = await acquireLockWithReplace();
+  if (!locked) {
+    app.quit();
+    return;
+  }
+
+  // Allow Web Audio API GainNode (0-200% volume boost) on remote media preview streams
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const headers = { ...(details.responseHeaders || {}) };
+    const hasAcao = Object.keys(headers).some((k) => k.toLowerCase() === 'access-control-allow-origin');
+    if (!hasAcao && details.url.startsWith('http') && !details.url.startsWith('http://127.0.0.1')) {
+      headers['Access-Control-Allow-Origin'] = ['*'];
     }
+    callback({ responseHeaders: headers });
   });
 
-  app.whenReady().then(async () => {
-    // Allow Web Audio API GainNode (0-200% volume boost) on remote media preview streams
-    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-      const headers = { ...(details.responseHeaders || {}) };
-      const hasAcao = Object.keys(headers).some((k) => k.toLowerCase() === 'access-control-allow-origin');
-      if (!hasAcao && details.url.startsWith('http') && !details.url.startsWith('http://127.0.0.1')) {
-        headers['Access-Control-Allow-Origin'] = ['*'];
-      }
-      callback({ responseHeaders: headers });
-    });
+  registerIpc();
+  await aria2.start(store.getSettings());
+  createWindow();
 
-    registerIpc();
-    await aria2.start(store.getSettings());
-    createWindow();
-
-    pollTimer = setInterval(() => {
-      broadcastTasks().catch(() => {});
-    }, 1000);
-  });
-}
+  pollTimer = setInterval(() => {
+    broadcastTasks().catch(() => {});
+  }, 1000);
+});
 
 app.on('before-quit', () => {
   if (pollTimer) clearInterval(pollTimer);

@@ -52,7 +52,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   // Trimmer state
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showVideoTrimmer, setShowVideoTrimmer] = useState(false);
+  const [showDetailTrimmer, setShowDetailTrimmer] = useState(false);
   const [trimStartSec, setTrimStartSec] = useState(0);
   const [trimEndSec, setTrimEndSec] = useState(60);
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
@@ -74,7 +74,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   const isAudioFormat = ['mp3', 'm4a', 'wav'].includes(mediaFormat);
   const hasAnalyzedMedia = Boolean(mediaInfo);
-  const trimmerVisible = mode === 'media' && hasAnalyzedMedia && (isAudioFormat || showVideoTrimmer);
+  const trimmerVisible = mode === 'media' && hasAnalyzedMedia && showDetailTrimmer;
   const totalDuration = mediaInfo?.duration || 60;
 
   // Automatically extract real audio waveform peaks when link is analyzed & trimmer is visible
@@ -243,7 +243,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
       setMediaInfo(null);
       setWaveformPeaks([]);
       setCustomFileName('');
-      setShowVideoTrimmer(false);
+      setShowDetailTrimmer(false);
+      setIsFullscreen(false);
       onTaskCreated();
       onClose();
     } catch (err: unknown) {
@@ -257,34 +258,44 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   return (
     <div
-      className={`fixed top-10 inset-x-0 bottom-0 z-40 bg-black/75 backdrop-blur-sm flex items-center justify-center ${
+      className={`fixed top-10 inset-x-0 bottom-0 z-40 bg-black/75 backdrop-blur-md flex items-center justify-center transition-all duration-300 ease-out ${
         isFullscreen ? 'p-0' : 'p-4'
       }`}
     >
       <div
         className={`w-full ${
           isFullscreen
-            ? 'h-full max-w-none max-h-none rounded-none border-0'
-            : `${trimmerVisible ? 'max-w-4xl' : 'max-w-2xl'} rounded-2xl max-h-[calc(100vh-5.5rem)] border border-white/[0.09]`
-        } bg-[#131926] shadow-2xl overflow-hidden flex flex-col transition-all duration-200`}
+            ? 'h-full max-w-none max-h-none rounded-none border-0 shadow-none scale-100'
+            : `${trimmerVisible ? 'max-w-4xl' : 'max-w-2xl'} rounded-2xl max-h-[calc(100vh-5.5rem)] border border-white/[0.09] shadow-2xl scale-100`
+        } bg-[#131926] overflow-hidden flex flex-col transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]`}
       >
         {/* Header */}
-        <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between shrink-0">
+        <div className="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <Sparkles className="w-5 h-5 text-indigo-400" />
             <h2 className="text-base font-semibold text-white">Tạo tác vụ tải xuống</h2>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setIsFullscreen((v) => !v)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
-              title={isFullscreen ? 'Thu gọn khung nhập' : 'Mở rộng toàn khung để căn chỉnh dễ hơn'}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-all duration-200 cursor-pointer ${
+                isFullscreen
+                  ? 'bg-cyan-500/15 border-cyan-400/35 text-cyan-300 hover:bg-cyan-500/25'
+                  : 'bg-white/[0.04] border-white/[0.08] text-slate-300 hover:text-white hover:bg-white/[0.1]'
+              }`}
+              title={isFullscreen ? 'Thu nhỏ khung về kích thước chuẩn' : 'Mở rộng toàn màn hình để xem video & chỉnh sóng âm'}
             >
               {isFullscreen ? (
-                <Minimize2 className="w-4 h-4" />
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>Thu nhỏ</span>
+                </>
               ) : (
-                <Maximize2 className="w-4 h-4" />
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>Mở rộng</span>
+                </>
               )}
             </button>
             <button
@@ -500,27 +511,31 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                 </div>
               </div>
 
-              {/* Minimalist Video Trim Toggle — only shown AFTER a link is analyzed */}
-              {hasAnalyzedMedia && !isAudioFormat && (
+              {/* Unified Detail Toggle for BOTH MP3/Audio & MP4/Video — shown after link is analyzed */}
+              {hasAnalyzedMedia && (
                 <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#0b0e14] border border-white/[0.06]">
                   <button
                     type="button"
-                    onClick={() => setShowVideoTrimmer((v) => !v)}
+                    onClick={() => setShowDetailTrimmer((v) => !v)}
                     className="flex items-center gap-2 text-xs font-medium text-slate-200 hover:text-cyan-300 transition-colors cursor-pointer"
                   >
                     <Scissors className="w-4 h-4 text-cyan-400" />
-                    <span>Cắt đoạn video (Đầu – Cuối • Zoom cuộn chuột kiểu CapCut)</span>
+                    <span>
+                      {isAudioFormat
+                        ? 'Hiển thị chi tiết MP3 / Âm thanh (Cắt đoạn • Sóng âm • Kích âm 200%)'
+                        : 'Hiển thị chi tiết MP4 / Video (Xem trước • Cắt đoạn • Sóng âm • Zoom)'}
+                    </span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowVideoTrimmer((v) => !v)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
-                      showVideoTrimmer
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                        : 'bg-white/[0.06] text-slate-400 hover:text-white'
+                    onClick={() => setShowDetailTrimmer((v) => !v)}
+                    className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all duration-200 cursor-pointer ${
+                      showDetailTrimmer
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/35'
+                        : 'bg-indigo-500/20 text-indigo-200 border border-indigo-500/30 hover:bg-indigo-500/30'
                     }`}
                   >
-                    {showVideoTrimmer ? 'Thu gọn' : 'Mở thanh cắt'}
+                    {showDetailTrimmer ? 'Thu gọn' : 'Chi tiết'}
                   </button>
                 </div>
               )}

@@ -721,14 +721,14 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
         </div>
       </div>
 
-      {/* Video Preview Area (only in Video mode — wheel zooms timeline CapCut-style!) */}
+      {/* Video Preview Area — expands prominently when fullscreen so video is large & crystal clear */}
       {mode === 'video' && (
         <div
           ref={videoAreaRef}
-          className={`relative bg-black/70 flex items-center justify-center ${
-            expanded ? 'h-56' : 'h-36'
-          } border-b border-white/[0.06] overflow-hidden group transition-all`}
-          title="Cuộn con lăn chuột ở đây để phóng to trục thời gian kiểu CapCut"
+          className={`relative bg-black/85 flex items-center justify-center ${
+            expanded ? 'h-[48vh] min-h-[340px] max-h-[560px]' : 'h-48'
+          } border-b border-white/[0.06] overflow-hidden group transition-[height] duration-300 ease-out`}
+          title="Cuộn con lăn chuột ở đây để phóng to trục thời gian"
         >
           {videoUrl ? (
             <video
@@ -738,7 +738,7 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
               muted={!videoHasAudio}
               preload="metadata"
               playsInline
-              className="h-full max-w-full object-contain"
+              className="h-full w-full object-contain"
             />
           ) : thumbnail ? (
             <img
@@ -752,15 +752,15 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
             </div>
           )}
 
-          {/* Subtle CapCut zoom hint overlay */}
-          <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/65 backdrop-blur text-[10px] text-cyan-300 border border-white/10 pointer-events-none">
+          {/* Subtle zoom hint overlay */}
+          <div className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 rounded-md bg-black/70 backdrop-blur text-[10.5px] text-cyan-300 border border-white/10 pointer-events-none">
             {formatPreciseTime(playhead)} • Lăn chuột để zoom ({zoom.toFixed(1)}x)
           </div>
         </div>
       )}
 
-      {/* Waveform / Timeline Track (mp3cut.net dense style) */}
-      <div className="px-3.5 pt-4 pb-2">
+      {/* Waveform / Timeline Track — neatly compact below the expanded video */}
+      <div className={expanded && mode === 'video' ? 'px-3.5 pt-2.5 pb-1.5' : 'px-3.5 pt-4 pb-2'}>
         <div
           ref={trackRef}
           onMouseDown={(e) => {
@@ -769,7 +769,9 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
             seekMedia(t);
             setDragging('playhead');
           }}
-          className="relative h-28 rounded-lg bg-[#0b2545] border border-cyan-400/20 overflow-hidden cursor-crosshair transition-all"
+          className={`relative ${
+            expanded && mode === 'video' ? 'h-20' : 'h-28'
+          } rounded-lg bg-[#0b2545] border border-cyan-400/20 overflow-hidden cursor-crosshair transition-[height] duration-300 ease-out`}
         >
           {/* Optional filename watermark like mp3cut.net */}
           {title && (

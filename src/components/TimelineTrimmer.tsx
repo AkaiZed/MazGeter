@@ -718,13 +718,13 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
         </div>
       </div>
 
-      {/* Video Preview Area — expands prominently when fullscreen so video is large & crystal clear */}
+      {/* Video Preview Area — stretches flex-1 to fill all available vertical space while keeping waveform & controls 100% visible */}
       {mode === 'video' && (
         <div
           ref={videoAreaRef}
           className={`relative bg-black/85 flex items-center justify-center ${
-            expanded ? 'h-[56vh] min-h-[380px] max-h-[640px]' : 'h-48'
-          } border-b border-white/[0.06] overflow-hidden group transition-[height] duration-300 ease-out`}
+            expanded ? 'flex-1 min-h-[240px]' : 'h-48'
+          } border-b border-white/[0.06] overflow-hidden group transition-all duration-300 ease-out`}
         >
           {videoUrl ? (
             <video

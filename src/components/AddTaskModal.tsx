@@ -56,7 +56,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const [loadingPeaks, setLoadingPeaks] = useState(false);
   const scannedWaveForRef = useRef<string | null>(null);
-  const formatSectionRef = useRef<HTMLDivElement | null>(null);
+  const trimmerSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Direct/Torrent mode state (Motrix)
   const [customFileName, setCustomFileName] = useState('');
@@ -185,11 +185,11 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     };
   }, [mode, urlInput, downloadPlaylist, analyzing]);
 
-  // When sidebar is collapsed in MP4/Video detail mode, smoothly scroll so Format + Expanded Video + Waveform fill the viewport
+  // When sidebar is collapsed in MP4/Video detail mode, smoothly scroll straight to the Trimmer so Video + Waveform + Controls fill 100% of the viewport
   useEffect(() => {
     if (!sidebarOpen && trimmerVisible && !isAudioFormat) {
       const timer = window.setTimeout(() => {
-        formatSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        trimmerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 120);
       return () => window.clearTimeout(timer);
     }
@@ -476,7 +476,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
           {/* Media Options */}
           {mode === 'media' ? (
-            <div ref={formatSectionRef} className="space-y-3.5 scroll-mt-3">
+            <div className="space-y-3.5">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-slate-400 block mb-1.5">
@@ -572,26 +572,28 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
               {/* Interactive Waveform / Video Timeline Trimmer */}
               {trimmerVisible && (
-                <TimelineTrimmer
-                  mode={isAudioFormat ? 'audio' : 'video'}
-                  duration={totalDuration}
-                  title={mediaInfo?.title}
-                  audioUrl={mediaInfo?.audioStreamUrl}
-                  videoUrl={mediaInfo?.videoStreamUrl}
-                  videoHasAudio={mediaInfo?.videoHasAudio}
-                  thumbnail={mediaInfo?.thumbnail}
-                  peaks={waveformPeaks}
-                  loadingPeaks={loadingPeaks}
-                  expanded={!sidebarOpen}
-                  startSec={trimStartSec}
-                  endSec={trimEndSec}
-                  volumePercent={volumePercent}
-                  onChangeVolumePercent={setVolumePercent}
-                  onChangeRange={(s, e) => {
-                    setTrimStartSec(s);
-                    setTrimEndSec(e);
-                  }}
-                />
+                <div ref={trimmerSectionRef} className="scroll-mt-3">
+                  <TimelineTrimmer
+                    mode={isAudioFormat ? 'audio' : 'video'}
+                    duration={totalDuration}
+                    title={mediaInfo?.title}
+                    audioUrl={mediaInfo?.audioStreamUrl}
+                    videoUrl={mediaInfo?.videoStreamUrl}
+                    videoHasAudio={mediaInfo?.videoHasAudio}
+                    thumbnail={mediaInfo?.thumbnail}
+                    peaks={waveformPeaks}
+                    loadingPeaks={loadingPeaks}
+                    expanded={!sidebarOpen}
+                    startSec={trimStartSec}
+                    endSec={trimEndSec}
+                    volumePercent={volumePercent}
+                    onChangeVolumePercent={setVolumePercent}
+                    onChangeRange={(s, e) => {
+                      setTrimStartSec(s);
+                      setTrimEndSec(e);
+                    }}
+                  />
+                </div>
               )}
             </div>
           ) : (

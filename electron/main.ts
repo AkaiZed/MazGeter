@@ -1,0 +1,291 @@
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeImage,
+  shell,
+  Tray,
+} from 'electron';
+import fs from 'fs';
+import path from 'path';
+import { Aria2Engine } from './aria2Engine';
+import { getBinaryStatus } from './binResolver';
+import { MediaEngine } from './mediaEngine';
+import { AppStore } from './store';
+import {
+  AddAria2TaskPayload,
+  AddMediaTaskPayload,
+  AppSettings,
+  DownloadTask,
+  GlobalStats,
+  MediaToolPayload,
+} from './types';
+
+let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let isQuitting = false;
+let pollTimer: NodeJS.Timeout | null = null;
+
+const store = new AppStore();
+const aria2 = new Aria2Engine();
+const media = new MediaEngine();
+
+async function broadcastTasks() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const ariaTasks = await aria2.getAllTasks();
+  const activeMedia = media.getActiveTasks();
+  const historyMedia = store.getMediaHistory();
+
+  // Merge without duplicating active media ids
+  const activeIds = new Set(activeMedia.map((t) => t.id));
+  const merged: DownloadTask[] = [
+    ...activeMedia,
+    ...ariaTasks,
+    ...historyMedia.filter((h) => !activeIds.has(h.id)),
+  ];
+
+  const stats: GlobalStats = {
+    downloadSpeed: merged.reduce((acc, t) => acc + (t.status === 'active' ? t.downloadSpeed : 0), 0),
+    uploadSpeed: merged.reduce((acc, t) => acc + (t.status === 'active' ? t.uploadSpeed : 0), 0),
+    activeCount: merged.filter((t) => t.status === 'active').length,
+    waitingCount: merged.filter((t) => t.status === 'waiting' || t.status === 'paused').length,
+    stoppedCount: merged.filter((t) => t.status === 'complete' || t.status === 'error').length,
+  };
+
+  mainWindow.webContents.send('tasks:update', { tasks: merged, stats });
+}
+
+function createTray() {
+  // Simple 16x16 indigo PNG icon via SVG data URL so it never fails if icon file missing
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="8" fill="#6366f1"/>
+    <path d="M16 7v12m0 0l-5-5m5 5l5-5M8 24h16" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </svg>`;
+  const icon = nativeImage.createFromDataURL(
+    `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+  );
+  tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  tray.setToolTip('MazGeter — All-in-One Downloader');
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Mở MazGeter',
+      click: () => {
+        mainWindow?.show();
+        mainWindow?.focus();
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Thoát hoàn toàn',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+  tray.setContextMenu(menu);
+  tray.on('double-click', () => {
+    mainWindow?.show();
+    mainWindow?.focus();
+  });
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1220,
+    height: 780,
+    minWidth: 980,
+    minHeight: 640,
+    frame: false,
+    backgroundColor: '#0b0e14',
+    titleBarStyle: 'hidden',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  const devUrl = process.env.VITE_DEV_SERVER_URL || (!app.isPackaged ? 'http://localhost:5173' : '');
+  if (devUrl && !fs.existsSync(path.join(__dirname, '../dist/index.html'))) {
+    mainWindow.loadURL(devUrl);
+  } else if (!app.isPackaged && process.env.NODE_ENV === 'development') {
+    mainWindow.loadURL('http://localhost:5173');
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
+
+  mainWindow.on('close', (e) => {
+    const settings = store.getSettings();
+    if (!isQuitting && settings.closeToTray) {
+      e.preventDefault();
+      mainWindow?.hide();
+    }
+  });
+}
+
+function registerIpc() {
+  // Window controls
+  ipcMain.on('window:minimize', () => mainWindow?.minimize());
+  ipcMain.on('window:maximize', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+  });
+  ipcMain.on('window:close', () => mainWindow?.close());
+
+  // Settings & Binaries
+  ipcMain.handle('settings:get', () => store.getSettings());
+  ipcMain.handle('settings:update', async (_e, partial: Partial<AppSettings>) => {
+    const next = store.updateSettings(partial);
+    await aria2.applySettings(next);
+    return next;
+  });
+  ipcMain.handle('binaries:status', () => getBinaryStatus());
+
+  // Dialogs & Clipboard
+  ipcMain.handle('dialog:selectFolder', async () => {
+    if (!mainWindow) return null;
+    const res = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return res.canceled ? null : res.filePaths[0];
+  });
+
+  ipcMain.handle('dialog:selectFile', async (_e, filters?: Electron.FileFilter[]) => {
+    if (!mainWindow) return null;
+    const res = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters,
+    });
+    return res.canceled ? null : res.filePaths[0];
+  });
+
+  ipcMain.handle('clipboard:read', () => clipboard.readText());
+
+  // Media analysis (XGetter)
+  ipcMain.handle('media:analyze', async (_e, url: string) => {
+    return media.analyzeUrl(url);
+  });
+
+  // Add tasks
+  ipcMain.handle('task:addMedia', async (_e, payload: AddMediaTaskPayload) => {
+    const settings = store.getSettings();
+    const task = media.startDownload(
+      payload,
+      settings.downloadDir,
+      () => {
+        broadcastTasks();
+      },
+      (completedTask) => {
+        store.upsertMediaHistory(completedTask);
+        broadcastTasks();
+      }
+    );
+    await broadcastTasks();
+    return task;
+  });
+
+  ipcMain.handle('task:addAria2', async (_e, payload: AddAria2TaskPayload) => {
+    const settings = store.getSettings();
+    const gid = await aria2.addUri(payload, settings);
+    await broadcastTasks();
+    return gid;
+  });
+
+  ipcMain.handle('task:addTorrent', async (_e, filePath: string, dir?: string) => {
+    const settings = store.getSettings();
+    const gid = await aria2.addTorrent(filePath, dir || settings.downloadDir);
+    await broadcastTasks();
+    return gid;
+  });
+
+  // Task actions
+  ipcMain.handle('task:pause', async (_e, id: string, engine: 'aria2' | 'yt-dlp') => {
+    if (engine === 'aria2') {
+      await aria2.pause(id);
+    } else {
+      media.cancelTask(id);
+    }
+    await broadcastTasks();
+  });
+
+  ipcMain.handle('task:resume', async (_e, id: string, engine: 'aria2' | 'yt-dlp') => {
+    if (engine === 'aria2') {
+      await aria2.resume(id);
+    }
+    await broadcastTasks();
+  });
+
+  ipcMain.handle('task:remove', async (_e, id: string, engine: 'aria2' | 'yt-dlp') => {
+    if (engine === 'aria2') {
+      await aria2.remove(id);
+    } else {
+      media.cancelTask(id);
+      store.removeMediaHistory(id);
+    }
+    await broadcastTasks();
+  });
+
+  ipcMain.handle('task:clearCompleted', async () => {
+    await aria2.clearCompleted();
+    store.clearMediaHistory();
+    await broadcastTasks();
+  });
+
+  ipcMain.handle('task:openFolder', async (_e, targetPath: string) => {
+    if (!targetPath) return;
+    if (fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
+      shell.showItemInFolder(targetPath);
+    } else if (fs.existsSync(targetPath)) {
+      await shell.openPath(targetPath);
+    }
+  });
+
+  ipcMain.handle('task:openFile', async (_e, filePath: string) => {
+    if (filePath && fs.existsSync(filePath)) {
+      await shell.openPath(filePath);
+    }
+  });
+
+  ipcMain.handle('tasks:refresh', async () => {
+    await broadcastTasks();
+  });
+
+  // FFmpeg local media tools
+  ipcMain.handle('tools:run', async (_e, payload: MediaToolPayload) => {
+    const settings = store.getSettings();
+    return media.runFfmpegTool(payload, settings.downloadDir, (progress) => {
+      mainWindow?.webContents.send('tools:progress', progress);
+    });
+  });
+}
+
+app.whenReady().then(async () => {
+  registerIpc();
+  await aria2.start(store.getSettings());
+  createWindow();
+  createTray();
+
+  pollTimer = setInterval(() => {
+    broadcastTasks().catch(() => {});
+  }, 1000);
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
+  if (pollTimer) clearInterval(pollTimer);
+  media.stopAll();
+  aria2.stop();
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});

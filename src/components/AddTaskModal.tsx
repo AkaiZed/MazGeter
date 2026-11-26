@@ -1,0 +1,545 @@
+import React, { useEffect, useState } from 'react';
+import {
+  ClipboardPaste,
+  Download,
+  FileArchive,
+  Film,
+  FolderOpen,
+  Globe,
+  Loader2,
+  Magnet,
+  Music,
+  Scissors,
+  Search,
+  Sparkles,
+  Subtitles,
+  X,
+} from 'lucide-react';
+import { AppSettings, MediaInfo } from '../types';
+import { detectUrlType } from '../utils';
+
+interface AddTaskModalProps {
+  open: boolean;
+  onClose: () => void;
+  settings: AppSettings | null;
+  onTaskCreated: () => void;
+}
+
+type ModalMode = 'media' | 'direct';
+
+export const AddTaskModal: React.FC<AddTaskModalProps> = ({
+  open,
+  onClose,
+  settings,
+  onTaskCreated,
+}) => {
+  const [mode, setMode] = useState<ModalMode>('media');
+  const [urlInput, setUrlInput] = useState('');
+  const [saveDir, setSaveDir] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  // Media mode state (XGetter)
+  const [analyzing, setAnalyzing] = useState(false);
+  const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null);
+  const [mediaFormat, setMediaFormat] = useState<'mp4' | 'mkv' | 'mp3' | 'm4a' | 'wav'>('mp4');
+  const [quality, setQuality] = useState('1080');
+  const [downloadSubs, setDownloadSubs] = useState(false);
+  const [subLang, setSubLang] = useState('vi,en');
+  const [trimStart, setTrimStart] = useState('');
+  const [trimEnd, setTrimEnd] = useState('');
+
+  // Direct/Torrent mode state (Motrix)
+  const [customFileName, setCustomFileName] = useState('');
+  const [splitThreads, setSplitThreads] = useState(16);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setSaveDir(settings?.downloadDir || '');
+      setSplitThreads(settings?.aria2Split || 16);
+      setError(null);
+    }
+  }, [open, settings]);
+
+  if (!open) return null;
+
+  const isAudioFormat = ['mp3', 'm4a', 'wav'].includes(mediaFormat);
+
+  const handlePaste = async () => {
+    try {
+      const text = (await window.mazgeter?.readClipboard()) || '';
+      if (!text.trim()) return;
+      setUrlInput(text.trim());
+      setError(null);
+      const detected = detectUrlType(text.trim());
+      setMode(detected === 'media' ? 'media' : 'direct');
+    } catch {
+      setError('Không đọc được clipboard.');
+    }
+  };
+
+  const handleChooseDir = async () => {
+    const dir = await window.mazgeter?.selectFolder();
+    if (dir) setSaveDir(dir);
+  };
+
+  const handleAnalyze = async () => {
+    const url = urlInput.trim();
+    if (!url) {
+      setError('Vui lòng dán đường dẫn video/media.');
+      return;
+    }
+    setError(null);
+    setAnalyzing(true);
+    setMediaInfo(null);
+    try {
+      const info = await window.mazgeter!.analyzeMedia(url);
+      setMediaInfo(info);
+      if (info.videoQualities.length > 0 && !isAudioFormat) {
+        setQuality(info.videoQualities[1]?.value || info.videoQualities[0].value);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Không thể phân tích liên kết.');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleAddTorrentFile = async () => {
+    const file = await window.mazgeter?.selectFile([
+      { name: 'Torrent Files', extensions: ['torrent'] },
+    ]);
+    if (!file) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await window.mazgeter!.addTorrentTask(file, saveDir || undefined);
+      onTaskCreated();
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Không thể thêm file torrent.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStartDownload = async () => {
+    const raw = urlInput.trim();
+    if (!raw) {
+      setError('Vui lòng nhập ít nhất một đường dẫn.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      if (mode === 'media') {
+        await window.mazgeter!.addMediaTask({
+          url: raw,
+          title: mediaInfo?.title,
+          thumbnail: mediaInfo?.thumbnail,
+          format: mediaFormat,
+          quality,
+          dir: saveDir || undefined,
+          downloadSubtitles: downloadSubs,
+          subtitleLang: subLang,
+          trimStart: trimStart.trim() || undefined,
+          trimEnd: trimEnd.trim() || undefined,
+          isPlaylist: mediaInfo?.isPlaylist,
+        });
+      } else {
+        const lines = raw
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        for (const line of lines) {
+          await window.mazgeter!.addAria2Task({
+            urls: [line],
+            dir: saveDir || undefined,
+            out: lines.length === 1 && customFileName.trim() ? customFileName.trim() : undefined,
+            split: splitThreads,
+            maxConnectionPerServer: splitThreads,
+          });
+        }
+      }
+      setUrlInput('');
+      setMediaInfo(null);
+      setCustomFileName('');
+      setTrimStart('');
+      setTrimEnd('');
+      onTaskCreated();
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Không thể bắt đầu tải xuống.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl bg-[#131926] border border-white/[0.09] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-base font-semibold text-white">Tạo tác vụ tải xuống</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Mode Switcher */}
+        <div className="px-5 pt-4">
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#0b0e14] border border-white/[0.06]">
+            <button
+              onClick={() => setMode('media')}
+              className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                mode === 'media'
+                  ? 'bg-indigo-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Film className="w-4 h-4" />
+              <span>Video / Âm thanh (70+ trang • yt-dlp)</span>
+            </button>
+            <button
+              onClick={() => setMode('direct')}
+              className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                mode === 'direct'
+                  ? 'bg-emerald-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Globe className="w-4 h-4" />
+              <span>File đa luồng / Torrent / Magnet (aria2)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-4 overflow-y-auto">
+          {/* URL input */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium text-slate-300">
+                {mode === 'media'
+                  ? 'Đường dẫn Video / Playlist (YouTube, TikTok, Facebook, Bilibili...)'
+                  : 'Đường dẫn tải trực tiếp (HTTP/HTTPS/FTP/Magnet — mỗi dòng 1 link)'}
+              </label>
+              <button
+                type="button"
+                onClick={handlePaste}
+                className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
+              >
+                <ClipboardPaste className="w-3.5 h-3.5" />
+                Dán link
+              </button>
+            </div>
+
+            {mode === 'media' ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="flex-1 bg-[#0b0e14] border border-white/[0.08] focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleAnalyze}
+                  disabled={analyzing}
+                  className="px-4 py-2.5 rounded-xl bg-white/[0.07] hover:bg-white/[0.12] border border-white/[0.08] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {analyzing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                  <span>Phân tích</span>
+                </button>
+              </div>
+            ) : (
+              <textarea
+                rows={3}
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="https://example.com/file.iso&#10;magnet:?xt=urn:btih:..."
+                className="w-full bg-[#0b0e14] border border-white/[0.08] focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none resize-none font-mono"
+              />
+            )}
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-xs text-rose-300">
+              {error}
+            </div>
+          )}
+
+          {/* Media Info Preview Card (XGetter-style) */}
+          {mode === 'media' && mediaInfo && (
+            <div className="rounded-xl bg-[#0b0e14] border border-indigo-500/25 p-3.5 flex gap-3.5 items-center">
+              {mediaInfo.thumbnail ? (
+                <img
+                  src={mediaInfo.thumbnail}
+                  alt={mediaInfo.title}
+                  className="w-32 h-20 object-cover rounded-lg border border-white/10 shrink-0"
+                />
+              ) : (
+                <div className="w-32 h-20 rounded-lg bg-indigo-500/10 flex items-center justify-center shrink-0">
+                  <Film className="w-7 h-7 text-indigo-400" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+                    {mediaInfo.extractor}
+                  </span>
+                  {mediaInfo.isPlaylist && (
+                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                      Playlist ({mediaInfo.playlistCount} mục)
+                    </span>
+                  )}
+                  <span className="text-xs text-slate-400">{mediaInfo.durationText}</span>
+                </div>
+                <p className="text-sm font-semibold text-white truncate">{mediaInfo.title}</p>
+                <p className="text-xs text-slate-400 truncate">{mediaInfo.uploader}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Media Options */}
+          {mode === 'media' ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-400 block mb-1.5">
+                    Định dạng
+                  </label>
+                  <div className="grid grid-cols-5 gap-1">
+                    {(['mp4', 'mkv', 'mp3', 'm4a', 'wav'] as const).map((fmt) => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        onClick={() => {
+                          setMediaFormat(fmt);
+                          if (['mp3', 'm4a', 'wav'].includes(fmt)) {
+                            setQuality('192');
+                          } else {
+                            setQuality(mediaInfo?.videoQualities[1]?.value || '1080');
+                          }
+                        }}
+                        className={`py-2 rounded-lg text-[11px] font-bold uppercase border transition-all cursor-pointer ${
+                          mediaFormat === fmt
+                            ? 'bg-indigo-500/20 border-indigo-500 text-indigo-200'
+                            : 'bg-[#0b0e14] border-white/[0.06] text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {fmt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-slate-400 block mb-1.5">
+                    {isAudioFormat ? 'Bitrate âm thanh' : 'Độ phân giải video'}
+                  </label>
+                  <select
+                    value={quality}
+                    onChange={(e) => setQuality(e.target.value)}
+                    className="w-full bg-[#0b0e14] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500"
+                  >
+                    {isAudioFormat ? (
+                      <>
+                        <option value="320">320 kbps (Cao nhất)</option>
+                        <option value="192">192 kbps (Tiêu chuẩn)</option>
+                        <option value="128">128 kbps (Nhẹ)</option>
+                      </>
+                    ) : mediaInfo ? (
+                      mediaInfo.videoQualities.map((q) => (
+                        <option key={q.value} value={q.value}>
+                          {q.label}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="best">Tốt nhất tự động (lên tới 8K)</option>
+                        <option value="2160">4K Ultra HD (2160p)</option>
+                        <option value="1080">Full HD (1080p)</option>
+                        <option value="720">HD (720p)</option>
+                        <option value="480">480p</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* Extra XGetter options: Subtitles & Trim */}
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-[#0b0e14] border border-white/[0.06]">
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={downloadSubs}
+                      onChange={(e) => setDownloadSubs(e.target.checked)}
+                      className="accent-indigo-500 rounded"
+                    />
+                    <Subtitles className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Tải kèm phụ đề (SRT)</span>
+                  </label>
+                  {downloadSubs && (
+                    <input
+                      type="text"
+                      value={subLang}
+                      onChange={(e) => setSubLang(e.target.value)}
+                      placeholder="vi,en"
+                      className="w-full bg-[#131926] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none"
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                    <Scissors className="w-3.5 h-3.5 text-violet-400" />
+                    <span>Cắt đoạn (tùy chọn)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={trimStart}
+                      onChange={(e) => setTrimStart(e.target.value)}
+                      placeholder="00:00"
+                      className="w-1/2 bg-[#131926] border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-white outline-none font-mono"
+                    />
+                    <span className="text-slate-500 text-xs">→</span>
+                    <input
+                      type="text"
+                      value={trimEnd}
+                      onChange={(e) => setTrimEnd(e.target.value)}
+                      placeholder="01:30"
+                      className="w-1/2 bg-[#131926] border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-white outline-none font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Direct / Torrent Options (Motrix-style) */
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-400 block mb-1.5">
+                    Đổi tên file (tùy chọn)
+                  </label>
+                  <input
+                    type="text"
+                    value={customFileName}
+                    onChange={(e) => setCustomFileName(e.target.value)}
+                    placeholder="Tự động theo tên gốc"
+                    className="w-full bg-[#0b0e14] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-400 block mb-1.5">
+                    Số luồng tải song song (aria2 split)
+                  </label>
+                  <select
+                    value={splitThreads}
+                    onChange={(e) => setSplitThreads(Number(e.target.value))}
+                    className="w-full bg-[#0b0e14] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
+                  >
+                    <option value={4}>4 luồng</option>
+                    <option value={8}>8 luồng</option>
+                    <option value={16}>16 luồng (Khuyên dùng)</option>
+                    <option value={32}>32 luồng (Tối đa)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddTorrentFile}
+                className="w-full py-2.5 px-3 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-300 text-xs font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <Magnet className="w-4 h-4" />
+                <span>Hoặc chọn file .torrent từ máy tính</span>
+              </button>
+            </div>
+          )}
+
+          {/* Save Directory */}
+          <div>
+            <label className="text-xs font-medium text-slate-400 block mb-1.5">
+              Thư mục lưu file
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={saveDir}
+                onChange={(e) => setSaveDir(e.target.value)}
+                className="flex-1 bg-[#0b0e14] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-slate-300 outline-none font-mono"
+              />
+              <button
+                type="button"
+                onClick={handleChooseDir}
+                className="px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-xs text-slate-200 flex items-center gap-1.5 cursor-pointer"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                Chọn
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3.5 border-t border-white/[0.06] bg-[#0f141f] flex items-center justify-between">
+          <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            {mode === 'media' ? (
+              <>
+                <Music className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Chạy bằng yt-dlp + FFmpeg trực tiếp trên IP máy bạn</span>
+              </>
+            ) : (
+              <>
+                <FileArchive className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Chạy bằng aria2c JSON-RPC đa luồng + Resume</span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.05] cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={handleStartDownload}
+              className={`px-5 py-2 rounded-xl text-xs font-semibold text-white flex items-center gap-2 shadow-lg transition-all disabled:opacity-50 cursor-pointer ${
+                mode === 'media'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-indigo-600/25'
+                  : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-600/25'
+              }`}
+            >
+              {submitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>Bắt đầu tải</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

@@ -402,8 +402,19 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                   type="text"
                   value={urlInput}
                   onChange={(e) => {
+                    const nextVal = e.target.value;
                     skipAutoUrlRef.current = null;
-                    setUrlInput(e.target.value);
+                    setUrlInput(nextVal);
+                    if (!nextVal.trim()) {
+                      analyzeRequestIdRef.current += 1;
+                      setAnalyzing(false);
+                      setError(null);
+                      setMediaInfo(null);
+                      setWaveformPeaks([]);
+                      scannedWaveForRef.current = null;
+                      setShowDetailTrimmer(false);
+                      setVolumePercent(100);
+                    }
                   }}
                   onKeyDown={(e) => e.key === 'Enter' && !analyzing && handleAnalyze()}
                   placeholder="Dán link video, nhạc hoặc playlist (YouTube, TikTok, Facebook...)..."

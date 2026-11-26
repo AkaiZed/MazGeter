@@ -5,6 +5,7 @@ import {
   dialog,
   ipcMain,
   nativeImage,
+  session,
   shell,
 } from 'electron';
 import fs from 'fs';
@@ -268,6 +269,16 @@ if (gotTheLock) {
   });
 
   app.whenReady().then(async () => {
+    // Allow Web Audio API GainNode (0-200% volume boost) on remote media preview streams
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      const headers = { ...(details.responseHeaders || {}) };
+      const hasAcao = Object.keys(headers).some((k) => k.toLowerCase() === 'access-control-allow-origin');
+      if (!hasAcao && details.url.startsWith('http') && !details.url.startsWith('http://127.0.0.1')) {
+        headers['Access-Control-Allow-Origin'] = ['*'];
+      }
+      callback({ responseHeaders: headers });
+    });
+
     registerIpc();
     await aria2.start(store.getSettings());
     createWindow();

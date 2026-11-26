@@ -43,10 +43,10 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   // Media mode state (XGetter + Waveform Trimmer)
   const [analyzing, setAnalyzing] = useState(false);
-  const [autoCountdown, setAutoCountdown] = useState<number | null>(null);
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null);
   const [mediaFormat, setMediaFormat] = useState<'mp4' | 'mkv' | 'mp3' | 'm4a' | 'wav'>('mp4');
   const [quality, setQuality] = useState('1080');
+  const [volumePercent, setVolumePercent] = useState(100);
   const analyzeRequestIdRef = useRef(0);
   const skipAutoUrlRef = useRef<string | null>(null);
 
@@ -130,7 +130,6 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
       setError('Vui lòng dán đường dẫn video/media.');
       return;
     }
-    setAutoCountdown(null);
     skipAutoUrlRef.current = url;
     const reqId = ++analyzeRequestIdRef.current;
 
@@ -146,6 +145,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
       const dur = info.duration || 60;
       setTrimStartSec(0);
       setTrimEndSec(dur);
+      setVolumePercent(100);
       if (info.videoQualities.length > 0 && !isAudioFormat) {
         setQuality(info.videoQualities[1]?.value || info.videoQualities[0].value);
       }
@@ -163,40 +163,19 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     analyzeRequestIdRef.current += 1;
     skipAutoUrlRef.current = urlInput.trim();
     setAnalyzing(false);
-    setAutoCountdown(null);
   };
 
-  // Auto-analyze 3s after pasting/entering a valid media URL (unless user runs or stops it)
+  // Instant auto-analyze as soon as a valid media URL is entered/pasted (user can click Dừng anytime)
   useEffect(() => {
     const trimmed = urlInput.trim();
-    if (!open || mode !== 'media' || analyzing) {
-      setAutoCountdown(null);
-      return;
-    }
-    if (!/^https?:\/\/\S+/i.test(trimmed) || skipAutoUrlRef.current === trimmed) {
-      setAutoCountdown(null);
-      return;
-    }
-
-    setAutoCountdown(3);
-    const interval = window.setInterval(() => {
-      setAutoCountdown((prev) => {
-        if (prev === null) return null;
-        if (prev <= 1) {
-          window.clearInterval(interval);
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    if (!open || mode !== 'media' || analyzing) return;
+    if (!/^https?:\/\/\S+/i.test(trimmed) || skipAutoUrlRef.current === trimmed) return;
 
     const timer = window.setTimeout(() => {
-      window.clearInterval(interval);
       void handleAnalyze(trimmed);
-    }, 3000);
+    }, 180);
 
     return () => {
-      window.clearInterval(interval);
       window.clearTimeout(timer);
     };
   }, [open, mode, urlInput, analyzing]);
@@ -242,6 +221,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
           dir: saveDir || undefined,
           trimStart: isTrimmed ? formatPreciseTime(trimStartSec) : undefined,
           trimEnd: isTrimmed ? formatPreciseTime(trimEndSec) : undefined,
+          volumePercent: trimmerVisible && volumePercent !== 100 ? volumePercent : undefined,
           isPlaylist: mediaInfo?.isPlaylist,
         });
       } else {
@@ -395,16 +375,10 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                     type="button"
                     onClick={() => handleAnalyze()}
                     className="px-4 py-2.5 rounded-xl bg-white/[0.07] hover:bg-white/[0.12] border border-white/[0.08] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer"
-                    title={
-                      autoCountdown !== null
-                        ? `Tự động phân tích sau ${autoCountdown}s (bấm để chạy ngay)`
-                        : 'Phân tích liên kết'
-                    }
+                    title="Phân tích liên kết"
                   >
                     <Search className="w-4 h-4" />
-                    <span>
-                      {autoCountdown !== null ? `Phân tích (${autoCountdown}s)` : 'Phân tích'}
-                    </span>
+                    <span>Phân tích</span>
                   </button>
                 )}
               </div>
@@ -565,6 +539,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                   expanded={isFullscreen}
                   startSec={trimStartSec}
                   endSec={trimEndSec}
+                  volumePercent={volumePercent}
+                  onChangeVolumePercent={setVolumePercent}
                   onChangeRange={(s, e) => {
                     setTrimStartSec(s);
                     setTrimEndSec(e);

@@ -75,6 +75,7 @@ export interface AddMediaTaskPayload {
   subtitleLang?: string;
   trimStart?: string;
   trimEnd?: string;
+  volumePercent?: number;
   isPlaylist?: boolean;
 }
 

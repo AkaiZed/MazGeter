@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ChevronDown,
+  Gauge,
   Loader2,
   Pause,
   Play,
   RotateCcw,
-  Scissors,
+  Volume1,
   Volume2,
+  VolumeX,
   ZoomIn,
 } from 'lucide-react';
 
@@ -18,9 +21,41 @@ interface TimelineTrimmerProps {
   thumbnail?: string | null;
   peaks: number[];
   loadingPeaks?: boolean;
+  expanded?: boolean;
   startSec: number;
   endSec: number;
+  volumePercent?: number;
+  onChangeVolumePercent?: (percent: number) => void;
   onChangeRange: (start: number, end: number) => void;
+}
+
+// Persistent per-element Web Audio GainNode map for true 0% - 200% in-app audio boost
+const mediaGainMap = new WeakMap<
+  HTMLMediaElement,
+  { ctx: AudioContext; gain: GainNode }
+>();
+
+function ensureMediaGainNode(
+  el: HTMLMediaElement
+): { ctx: AudioContext; gain: GainNode } | null {
+  const existing = mediaGainMap.get(el);
+  if (existing) return existing;
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return null;
+    const ctx = new AudioCtx();
+    const source = ctx.createMediaElementSource(el);
+    const gain = ctx.createGain();
+    source.connect(gain);
+    gain.connect(ctx.destination);
+    const entry = { ctx, gain };
+    mediaGainMap.set(el, entry);
+    return entry;
+  } catch {
+    return null;
+  }
 }
 
 export function formatPreciseTime(sec: number): string {
@@ -72,8 +107,11 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
   thumbnail,
   peaks,
   loadingPeaks,
+  expanded = false,
   startSec,
   endSec,
+  volumePercent,
+  onChangeVolumePercent,
   onChangeRange,
 }) => {
   const safeDuration = Math.max(1, duration || 60);
@@ -82,12 +120,41 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
   const [playhead, setPlayhead] = useState(startSec);
   const [isPlaying, setIsPlaying] = useState(false);
   const [dragging, setDragging] = useState<'start' | 'end' | 'playhead' | null>(null);
+  const [volume, setVolumeState] = useState(() =>
+    typeof volumePercent === 'number' ? Math.max(0, Math.min(2, volumePercent / 100)) : 1
+  );
+  const [isMuted, setIsMuted] = useState(false);
+
+  const setVolume = useCallback(
+    (nextVal: number) => {
+      const clamped = Math.max(0, Math.min(2, Math.round(nextVal * 100) / 100));
+      setVolumeState(clamped);
+      onChangeVolumePercent?.(Math.round(clamped * 100));
+    },
+    [onChangeVolumePercent]
+  );
+
+  useEffect(() => {
+    if (typeof volumePercent === 'number') {
+      const synced = Math.max(0, Math.min(2, volumePercent / 100));
+      setVolumeState(synced);
+    }
+  }, [volumePercent]);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [speedText, setSpeedText] = useState('1');
+  const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
+  const [panDragging, setPanDragging] = useState(false);
 
   // Editable text inputs synced with startSec / endSec
   const [startText, setStartText] = useState(formatPreciseTime(startSec));
   const [endText, setEndText] = useState(formatPreciseTime(endSec));
 
   const trackRef = useRef<HTMLDivElement | null>(null);
+  const videoAreaRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const speedBoxRef = useRef<HTMLDivElement | null>(null);
+  const panBarRef = useRef<HTMLDivElement | null>(null);
+  const volumeBoxRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -95,7 +162,7 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
   const viewEnd = Math.min(safeDuration, viewStart + visibleSpan);
 
   const displayPeaks = useMemo(() => {
-    return peaks.length > 10 ? peaks : generatePlaceholderPeaks(220);
+    return peaks.length > 10 ? peaks : generatePlaceholderPeaks(3200);
   }, [peaks]);
 
   // Sync text fields when props change
@@ -116,6 +183,35 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
   }, [safeDuration, audioUrl, videoUrl]);
 
   const activeMediaEl = mode === 'video' && videoUrl ? videoRef.current : audioRef.current;
+
+  // Sync in-app player volume (0-200% via Web Audio GainNode), mute & playback speed
+  useEffect(() => {
+    const el = mode === 'video' && videoUrl ? videoRef.current : audioRef.current;
+    if (!el) return;
+    el.muted = isMuted;
+    el.playbackRate = playbackSpeed;
+
+    const effective = isMuted ? 0 : volume;
+    if (effective > 1) {
+      const node = ensureMediaGainNode(el);
+      if (node) {
+        el.volume = 1;
+        node.gain.gain.value = effective;
+        if (node.ctx.state === 'suspended') {
+          node.ctx.resume().catch(() => {});
+        }
+        return;
+      }
+    } else {
+      const existing = mediaGainMap.get(el);
+      if (existing) {
+        el.volume = 1;
+        existing.gain.gain.value = effective;
+        return;
+      }
+    }
+    el.volume = Math.min(1, effective);
+  }, [mode, videoUrl, audioUrl, volume, isMuted, playbackSpeed]);
 
   const seekMedia = useCallback(
     (time: number) => {
@@ -213,30 +309,166 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
     };
   }, [dragging, clientXToTime, startSec, endSec, safeDuration, onChangeRange, seekMedia]);
 
-  // CapCut-style Mouse Wheel Zoom (works on both waveform & video preview)
-  const handleWheelZoom = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const rect = trackRef.current?.getBoundingClientRect();
-    let anchorRatio = 0.5;
-    if (rect && rect.width > 0 && e.clientX >= rect.left && e.clientX <= rect.right) {
-      anchorRatio = (e.clientX - rect.left) / rect.width;
-    } else {
-      // If wheel is over the video preview, anchor around current playhead
-      anchorRatio = Math.max(0, Math.min(1, (playhead - viewStart) / visibleSpan));
+  // Non-passive native wheel listener on Volume control (scroll up/down ±5% without scrolling modal)
+  const volStateRef = useRef({ volume, isMuted });
+  volStateRef.current = { volume, isMuted };
+
+  useEffect(() => {
+    const volEl = volumeBoxRef.current;
+    if (!volEl) return;
+    const onVolWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const { volume: curVol, isMuted: curMuted } = volStateRef.current;
+      const base = curMuted ? 0 : curVol;
+      const delta = e.deltaY < 0 ? 0.05 : -0.05;
+      const next = Math.max(0, Math.min(2, Math.round((base + delta) * 100) / 100));
+      setVolume(next);
+      setIsMuted(next === 0);
+    };
+    volEl.addEventListener('wheel', onVolWheel, { passive: false });
+    return () => volEl.removeEventListener('wheel', onVolWheel);
+  }, [setVolume]);
+
+  // Non-passive native wheel listener so outer modal/page NEVER scrolls when zooming waveform
+  const zoomStateRef = useRef({ zoom, viewStart, visibleSpan, safeDuration, playhead });
+  zoomStateRef.current = { zoom, viewStart, visibleSpan, safeDuration, playhead };
+
+  useEffect(() => {
+    const onNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const { zoom: curZoom, viewStart: curViewStart, visibleSpan: curSpan, safeDuration: curDur, playhead: curPlay } =
+        zoomStateRef.current;
+
+      const rect = trackRef.current?.getBoundingClientRect();
+      let anchorRatio = 0.5;
+      if (rect && rect.width > 0 && e.clientX >= rect.left && e.clientX <= rect.right) {
+        anchorRatio = (e.clientX - rect.left) / rect.width;
+      } else {
+        anchorRatio = Math.max(0, Math.min(1, (curPlay - curViewStart) / curSpan));
+      }
+
+      const anchorTime = curViewStart + anchorRatio * curSpan;
+      const factor = e.deltaY < 0 ? 1.3 : 1 / 1.3;
+      const nextZoom = Math.max(1, Math.min(20, Number((curZoom * factor).toFixed(2))));
+      const nextSpan = curDur / nextZoom;
+      const nextViewStart = Math.max(
+        0,
+        Math.min(curDur - nextSpan, anchorTime - anchorRatio * nextSpan)
+      );
+
+      setZoom(nextZoom);
+      setViewStart(nextZoom === 1 ? 0 : nextViewStart);
+    };
+
+    const trackEl = trackRef.current;
+    const videoEl = videoAreaRef.current;
+    trackEl?.addEventListener('wheel', onNativeWheel, { passive: false });
+    videoEl?.addEventListener('wheel', onNativeWheel, { passive: false });
+    return () => {
+      trackEl?.removeEventListener('wheel', onNativeWheel);
+      videoEl?.removeEventListener('wheel', onNativeWheel);
+    };
+  }, [mode, expanded]);
+
+  // High-density continuous Canvas waveform (matching Hình 2)
+  const drawWaveform = useCallback(() => {
+    const canvas = canvasRef.current;
+    const track = trackRef.current;
+    if (!canvas || !track) return;
+
+    const width = track.clientWidth;
+    const height = track.clientHeight;
+    if (width <= 0 || height <= 0) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const targetW = Math.floor(width * dpr);
+    const targetH = Math.floor(height * dpr);
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
     }
 
-    const anchorTime = viewStart + anchorRatio * visibleSpan;
-    const factor = e.deltaY < 0 ? 1.3 : 1 / 1.3;
-    const nextZoom = Math.max(1, Math.min(20, Number((zoom * factor).toFixed(2))));
-    const nextSpan = safeDuration / nextZoom;
-    const nextViewStart = Math.max(
-      0,
-      Math.min(safeDuration - nextSpan, anchorTime - anchorRatio * nextSpan)
-    );
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    setZoom(nextZoom);
-    setViewStart(nextZoom === 1 ? 0 : nextViewStart);
-  };
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const midY = height / 2;
+    const total = displayPeaks.length;
+
+    // Subtle vertical beat/time grid lines
+    const gridCount = Math.max(6, Math.min(24, Math.floor(width / 48)));
+    ctx.strokeStyle = 'rgba(16, 242, 107, 0.09)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let g = 1; g < gridCount; g++) {
+      const gx = Math.round((g / gridCount) * width) + 0.5;
+      ctx.moveTo(gx, 6);
+      ctx.lineTo(gx, height - 6);
+    }
+    ctx.stroke();
+
+    // Subtle center axis
+    ctx.fillStyle = mode === 'audio' ? 'rgba(16, 242, 107, 0.3)' : 'rgba(56, 189, 248, 0.3)';
+    ctx.fillRect(0, midY - 0.5, width, 1);
+
+    // Crisp 1px vertical bars every 1px (mp3cut.net style: dense clusters + crisp valleys + solid baseline)
+    const maxHalfH = height * 0.36;
+    const barStep = 1;
+    const barWidth = 1;
+    const barColor = mode === 'audio' ? '#10f26b' : 'rgba(56, 189, 248, 0.9)';
+    const coreColor = mode === 'audio' ? 'rgba(167, 255, 203, 0.35)' : 'rgba(186, 230, 253, 0.3)';
+
+    // Continuous solid center baseline so silent parts never look dotted
+    ctx.fillStyle = barColor;
+    ctx.fillRect(0, midY - 0.75, width, 1.5);
+
+    for (let x = 0; x < width; x += barStep) {
+      const t = viewStart + (x / width) * visibleSpan;
+      const exactIdx = (t / safeDuration) * (total - 1);
+      const i0 = Math.max(0, Math.min(total - 1, Math.floor(exactIdx)));
+      const i1 = Math.max(0, Math.min(total - 1, i0 + 1));
+      const frac = exactIdx - i0;
+      const peak = displayPeaks[i0] * (1 - frac) + displayPeaks[i1] * frac;
+
+      if (peak >= 0.03) {
+        const halfH = Math.max(1.2, peak * maxHalfH);
+        ctx.fillRect(x, midY - halfH, barWidth, halfH * 2);
+      }
+    }
+
+    // Subtle crisp inner highlight along the waveform spine
+    ctx.fillStyle = coreColor;
+    for (let x = 0; x < width; x += barStep) {
+      const t = viewStart + (x / width) * visibleSpan;
+      const exactIdx = (t / safeDuration) * (total - 1);
+      const i0 = Math.max(0, Math.min(total - 1, Math.floor(exactIdx)));
+      const i1 = Math.max(0, Math.min(total - 1, i0 + 1));
+      const frac = exactIdx - i0;
+      const peak = displayPeaks[i0] * (1 - frac) + displayPeaks[i1] * frac;
+
+      if (peak >= 0.08) {
+        const innerH = peak * maxHalfH * 0.42;
+        ctx.fillRect(x, midY - innerH, barWidth, innerH * 2);
+      }
+    }
+  }, [displayPeaks, viewStart, visibleSpan, safeDuration, mode]);
+
+  useEffect(() => {
+    drawWaveform();
+  }, [drawWaveform]);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => drawWaveform());
+    ro.observe(track);
+    return () => ro.disconnect();
+  }, [drawWaveform]);
 
   const timeToPercent = (t: number) => {
     return ((t - viewStart) / visibleSpan) * 100;
@@ -250,6 +482,8 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
     onChangeRange(0, safeDuration);
     setZoom(1);
     setViewStart(0);
+    setVolume(1);
+    setIsMuted(false);
     seekMedia(0);
     if (isPlaying) {
       activeMediaEl?.pause();
@@ -279,34 +513,144 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
     }
   };
 
-  // Slice visible waveform bars according to zoom window
-  const visibleBars = useMemo(() => {
-    const total = displayPeaks.length;
-    const iStart = Math.floor((viewStart / safeDuration) * total);
-    const iEnd = Math.max(iStart + 4, Math.ceil((viewEnd / safeDuration) * total));
-    return displayPeaks.slice(iStart, iEnd);
-  }, [displayPeaks, viewStart, viewEnd, safeDuration]);
+  const applySpeedValue = (val: number) => {
+    const clamped = Math.max(0.1, Math.min(10, Math.round(val * 100) / 100));
+    setPlaybackSpeed(clamped);
+    setSpeedText(String(clamped));
+  };
+
+  const handleSpeedInputChange = (raw: string) => {
+    // Allow only digits and at most one decimal dot (no '-', no letters, no symbols)
+    const digitsAndDots = raw.replace(/[^0-9.]/g, '');
+    const firstDot = digitsAndDots.indexOf('.');
+    const sanitized =
+      firstDot === -1
+        ? digitsAndDots
+        : digitsAndDots.slice(0, firstDot + 1) + digitsAndDots.slice(firstDot + 1).replace(/\./g, '');
+
+    setSpeedText(sanitized);
+    if (sanitized !== '' && sanitized !== '.') {
+      const parsed = parseFloat(sanitized);
+      if (Number.isFinite(parsed) && parsed >= 0.1 && parsed <= 10) {
+        setPlaybackSpeed(Math.round(parsed * 100) / 100);
+      }
+    }
+  };
+
+  const commitSpeedInput = () => {
+    const parsed = parseFloat(speedText);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setSpeedText(String(playbackSpeed));
+      return;
+    }
+    applySpeedValue(parsed);
+  };
+
+  // Close speed dropdown on outside click
+  useEffect(() => {
+    if (!speedMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (speedBoxRef.current && !speedBoxRef.current.contains(e.target as Node)) {
+        setSpeedMenuOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [speedMenuOpen]);
+
+  // Dragging zoom-pan scrollbar thumb
+  useEffect(() => {
+    if (!panDragging) return;
+    const updatePan = (clientX: number) => {
+      const rect = panBarRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0) return;
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const centeredStart = ratio * safeDuration - visibleSpan / 2;
+      setViewStart(Math.max(0, Math.min(safeDuration - visibleSpan, centeredStart)));
+    };
+    const onMove = (e: MouseEvent) => updatePan(e.clientX);
+    const onUp = () => setPanDragging(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [panDragging, safeDuration, visibleSpan]);
 
   const canPlayPreview = Boolean(mode === 'video' ? videoUrl || audioUrl : audioUrl);
 
   return (
-    <div className="rounded-xl bg-[#0a192f] border border-cyan-500/20 overflow-hidden select-none">
+    <div className="rounded-xl bg-[#0a192f] border border-cyan-500/20 select-none relative">
       {/* Hidden Audio element for MP3/Audio mode */}
       {mode === 'audio' && audioUrl && (
-        <audio ref={audioRef} src={audioUrl} preload="metadata" />
+        <audio ref={audioRef} src={audioUrl} crossOrigin="anonymous" preload="metadata" />
       )}
 
-      {/* Top Strip: Mode Label + Zoom Indicator + Reset */}
-      <div className="px-3.5 py-2 bg-[#081324] border-b border-white/[0.06] flex items-center justify-between text-[11px]">
-        <div className="flex items-center gap-2 text-cyan-300 font-medium">
-          <Scissors className="w-3.5 h-3.5" />
-          <span>
-            {mode === 'audio'
-              ? 'Cắt âm thanh • Sóng âm (Ngắt quãng JLPT)'
-              : 'Cắt đoạn Video • Cuộn chuột để phóng to tinh chỉnh'}
-          </span>
+      {/* Top Strip: Compact Split Speed Button (Hình 2) + Zoom Indicator + Reset */}
+      <div className="px-3.5 py-2 bg-[#081324] rounded-t-xl border-b border-white/[0.06] flex items-center justify-between gap-2 text-[11px]">
+        <div className="flex items-center gap-2.5">
+          {/* Split-button Speed Control (like GitHub Star button in Hình 2) */}
+          <div ref={speedBoxRef} className="relative">
+            <div
+              className="inline-flex items-center rounded-lg bg-[#0d1c33] border border-white/15 overflow-hidden focus-within:border-cyan-400/70"
+              title="Tốc độ phát (0.1x – 10x): nhập số trực tiếp hoặc bấm mũi tên để chọn nhanh"
+            >
+              <div className="flex items-center gap-1 pl-2 pr-1.5 py-1">
+                <Gauge className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={speedText}
+                  onChange={(e) => handleSpeedInputChange(e.target.value)}
+                  onBlur={commitSpeedInput}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      commitSpeedInput();
+                      (e.currentTarget as HTMLInputElement).blur();
+                    }
+                  }}
+                  className="w-8 bg-transparent text-white font-mono text-[11px] font-semibold text-center outline-none"
+                  placeholder="1"
+                />
+                <span className="text-slate-400 font-mono text-[10.5px]">x</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSpeedMenuOpen((v) => !v)}
+                className="px-1.5 py-1.5 border-l border-white/15 text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer flex items-center justify-center"
+                title="Chọn nhanh tốc độ phát"
+              >
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            </div>
+
+            {speedMenuOpen && (
+              <div className="absolute left-0 top-full mt-1.5 w-32 rounded-lg bg-[#0b1729] border border-cyan-500/30 shadow-2xl py-1 z-50">
+                {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 5, 10].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      applySpeedValue(preset);
+                      setSpeedMenuOpen(false);
+                    }}
+                    className={`w-full px-3 py-1 text-left font-mono text-[11px] flex items-center justify-between transition-colors cursor-pointer ${
+                      playbackSpeed === preset
+                        ? 'bg-cyan-500/20 text-cyan-200 font-semibold'
+                        : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
+                    }`}
+                  >
+                    <span>{preset}x</span>
+                    {preset === 1 && <span className="text-[9.5px] text-slate-400">Chuẩn</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {loadingPeaks && (
-            <span className="flex items-center gap-1 text-[10px] text-emerald-300/90 ml-1">
+            <span className="flex items-center gap-1 text-[10px] text-emerald-300/90">
               <Loader2 className="w-3 h-3 animate-spin" />
               Đang quét sóng âm...
             </span>
@@ -339,14 +683,17 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
       {/* Video Preview Area (only in Video mode — wheel zooms timeline CapCut-style!) */}
       {mode === 'video' && (
         <div
-          onWheel={handleWheelZoom}
-          className="relative bg-black/70 flex items-center justify-center h-36 border-b border-white/[0.06] overflow-hidden group"
+          ref={videoAreaRef}
+          className={`relative bg-black/70 flex items-center justify-center ${
+            expanded ? 'h-56' : 'h-36'
+          } border-b border-white/[0.06] overflow-hidden group transition-all`}
           title="Cuộn con lăn chuột ở đây để phóng to trục thời gian kiểu CapCut"
         >
           {videoUrl ? (
             <video
               ref={videoRef}
               src={videoUrl}
+              crossOrigin="anonymous"
               preload="metadata"
               playsInline
               className="h-full max-w-full object-contain"
@@ -370,44 +717,30 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
         </div>
       )}
 
-      {/* Waveform / Timeline Track (mp3cut.net style) */}
+      {/* Waveform / Timeline Track (mp3cut.net dense style) */}
       <div className="px-3.5 pt-4 pb-2">
         <div
           ref={trackRef}
-          onWheel={handleWheelZoom}
           onMouseDown={(e) => {
             // Click directly on track moves playhead
             const t = clientXToTime(e.clientX);
             seekMedia(t);
             setDragging('playhead');
           }}
-          className="relative h-24 rounded-lg bg-[#0d2748] border border-cyan-400/20 overflow-hidden cursor-crosshair"
+          className="relative h-28 rounded-lg bg-[#0b2545] border border-cyan-400/20 overflow-hidden cursor-crosshair transition-all"
         >
           {/* Optional filename watermark like mp3cut.net */}
           {title && (
-            <div className="absolute top-1.5 inset-x-0 text-center text-[10px] text-cyan-200/40 truncate px-8 pointer-events-none">
+            <div className="absolute top-1.5 inset-x-0 text-center text-[10px] text-cyan-200/45 truncate px-8 pointer-events-none z-10">
               {title}
             </div>
           )}
 
-          {/* Waveform Bars (vivid green on navy, showing silence gaps clearly) */}
-          <div className="absolute inset-0 flex items-center justify-between gap-[1px] px-1 pointer-events-none">
-            {visibleBars.map((peak, idx) => {
-              const barHeightPct = Math.max(5, Math.round(peak * 86));
-              return (
-                <div
-                  key={idx}
-                  className="flex-1 rounded-full transition-[height] duration-150"
-                  style={{
-                    height: `${barHeightPct}%`,
-                    backgroundColor:
-                      mode === 'audio' ? '#10f26b' : 'rgba(56, 189, 248, 0.72)',
-                    opacity: peak < 0.09 ? 0.35 : 0.92,
-                  }}
-                />
-              );
-            })}
-          </div>
+          {/* High-resolution Canvas Waveform */}
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full pointer-events-none"
+          />
 
           {/* Left Trimmed-out Dimmed Overlay */}
           {startPct > 0 && (
@@ -478,33 +811,76 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
               <div className="w-[1.5px] flex-1 bg-white/90" />
             </div>
           )}
+          {/* Off-screen Start/End Handle Indicators when zoomed in */}
+          {startPct < 0 && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => setViewStart(Math.max(0, startSec - visibleSpan * 0.15))}
+              className="absolute left-1.5 bottom-1.5 px-1.5 py-0.5 rounded bg-cyan-950/90 border border-cyan-400/40 text-[9.5px] font-mono text-cyan-200 hover:bg-cyan-900 z-30 cursor-pointer"
+              title="Bấm để nhảy tới điểm đầu đang nằm ngoài khung nhìn"
+            >
+              ← Đầu: {formatPreciseTime(startSec)}
+            </button>
+          )}
+          {endPct > 100 && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() =>
+                setViewStart(Math.min(safeDuration - visibleSpan, endSec - visibleSpan * 0.85))
+              }
+              className="absolute right-1.5 bottom-1.5 px-1.5 py-0.5 rounded bg-cyan-950/90 border border-cyan-400/40 text-[9.5px] font-mono text-cyan-200 hover:bg-cyan-900 z-30 cursor-pointer"
+              title="Bấm để nhảy tới điểm cuối đang nằm ngoài khung nhìn"
+            >
+              Cuối: {formatPreciseTime(endSec)} →
+            </button>
+          )}
         </div>
 
-        {/* Time endpoints + Zoom Pan Slider */}
+        {/* Distinct Zoom Scrollbar (NOT a player seekbar) — only appears when zoom > 1 */}
+        {zoom > 1 && (
+          <div className="mt-1.5 flex items-center gap-2">
+            <span className="text-[9.5px] text-cyan-300/80 whitespace-nowrap font-medium">
+              ⇄ Cuộn vùng zoom
+            </span>
+            <div
+              ref={panBarRef}
+              onMouseDown={(e) => {
+                setPanDragging(true);
+                const rect = e.currentTarget.getBoundingClientRect();
+                const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const centeredStart = ratio * safeDuration - visibleSpan / 2;
+                setViewStart(Math.max(0, Math.min(safeDuration - visibleSpan, centeredStart)));
+              }}
+              className="relative flex-1 h-2.5 rounded bg-[#061326] border border-cyan-500/25 cursor-grab active:cursor-grabbing overflow-hidden"
+              title="Thanh cuộn vùng đang phóng to (không phải thanh tua phát) — kéo để xê dịch sóng âm"
+            >
+              <div
+                className="absolute inset-y-0 rounded bg-cyan-400/60 hover:bg-cyan-300/80 border border-cyan-200/50"
+                style={{
+                  left: `${(viewStart / safeDuration) * 100}%`,
+                  width: `${Math.max(6, (visibleSpan / safeDuration) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Time endpoints + Playhead / Total time */}
         <div className="mt-1.5 flex items-center justify-between text-[10px] font-mono text-cyan-300/75">
           <span>{formatPreciseTime(viewStart)}</span>
-          {zoom > 1 ? (
-            <input
-              type="range"
-              min={0}
-              max={Math.max(0.1, safeDuration - visibleSpan)}
-              step={0.1}
-              value={viewStart}
-              onChange={(e) => setViewStart(parseFloat(e.target.value))}
-              className="w-1/2 h-1 accent-cyan-400 cursor-pointer"
-              title="Trượt để di chuyển vùng đang phóng to"
-            />
-          ) : (
-            <span className="text-slate-500">
-              Đoạn chọn: {formatPreciseTime(Math.max(0, endSec - startSec))}
-            </span>
-          )}
+          <div className="text-[11px] font-mono text-slate-300">
+            <span className="text-white font-semibold">{formatPreciseTime(playhead)}</span>
+            <span className="text-slate-500 mx-1">/</span>
+            <span className="text-cyan-300/80">{formatPreciseTime(safeDuration)}</span>
+          </div>
           <span>{formatPreciseTime(viewEnd)}</span>
         </div>
       </div>
 
-      {/* Bottom Minimalist Control Bar (matching Hình 2) */}
-      <div className="px-3.5 py-2.5 bg-[#081324] border-t border-white/[0.06] flex items-center justify-between gap-3">
+      {/* Bottom Control Bar */}
+      <div className="px-3.5 py-2.5 bg-[#081324] rounded-b-xl border-t border-white/[0.06] flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2.5">
           <button
             type="button"
@@ -548,13 +924,67 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
           </div>
         </div>
 
-        <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-          <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
-          <span>
-            {canPlayPreview
-              ? 'Kéo 2 thanh xanh hoặc lăn chuột để căn chỉnh'
-              : 'Bấm Phân tích để tải sóng âm thật'}
-          </span>
+        {/* In-App Audio Volume & Boost Control (0% - 200%, default 100%, wheel ±5%) */}
+        <div
+          ref={volumeBoxRef}
+          className={`flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#0d1c33] border ${
+            !isMuted && volume > 1 ? 'border-amber-400/50' : 'border-white/10'
+          }`}
+          title="Âm lượng & kích âm thanh 0% – 200% (mặc định 100%, áp dụng cho cả nghe thử và file tải về)"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              if (isMuted || volume === 0) {
+                setIsMuted(false);
+                if (volume === 0) setVolume(1);
+              } else {
+                setIsMuted(true);
+              }
+            }}
+            className="text-slate-200 hover:text-cyan-300 transition-colors cursor-pointer flex items-center justify-center"
+            title={isMuted || volume === 0 ? 'Bật tiếng' : 'Tắt tiếng'}
+          >
+            {isMuted || volume === 0 ? (
+              <VolumeX className="w-4 h-4 text-rose-400" />
+            ) : volume < 0.5 ? (
+              <Volume1 className="w-4 h-4 text-emerald-400" />
+            ) : volume > 1 ? (
+              <Volume2 className="w-4 h-4 text-amber-400" />
+            ) : (
+              <Volume2 className="w-4 h-4 text-emerald-400" />
+            )}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={2}
+            step={0.05}
+            value={isMuted ? 0 : volume}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value);
+              setVolume(v);
+              setIsMuted(v === 0);
+            }}
+            className={`w-28 h-1 cursor-pointer ${
+              !isMuted && volume > 1 ? 'accent-amber-400' : 'accent-emerald-400'
+            }`}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setIsMuted(false);
+              setVolume(1);
+            }}
+            className={`w-10 text-right text-[10px] font-mono cursor-pointer transition-colors ${
+              !isMuted && volume > 1
+                ? 'text-amber-300 font-bold'
+                : 'text-slate-300 hover:text-white'
+            }`}
+            title="Bấm để đặt lại về 100%"
+          >
+            {isMuted ? '0%' : `${Math.round(volume * 100)}%`}
+          </button>
         </div>
       </div>
     </div>

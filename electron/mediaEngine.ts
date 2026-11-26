@@ -281,7 +281,7 @@ export class MediaEngine {
     }
   }
 
-  async extractWaveform(audioUrl: string, bars = 280, filesize?: number | null): Promise<number[]> {
+  async extractWaveform(audioUrl: string, bars = 8000, filesize?: number | null): Promise<number[]> {
     const ffmpeg = resolveBinary('ffmpeg.exe');
     if (!ffmpeg || !audioUrl) return [];
 
@@ -328,20 +328,22 @@ export class MediaEngine {
           const start = b * bucketSize;
           const end = Math.min(sampleCount, start + bucketSize);
           let sumSq = 0;
+          let peak = 0;
           let count = 0;
-          // Sample stride for speed while preserving accurate speech RMS envelope
-          const step = Math.max(1, Math.floor((end - start) / 400));
+          const step = Math.max(1, Math.floor((end - start) / 120));
           for (let i = start; i < end; i += step) {
-            const val = buf.readInt16LE(i * 2);
+            const val = Math.abs(buf.readInt16LE(i * 2));
             sumSq += val * val;
+            if (val > peak) peak = val;
             count++;
           }
           const rms = count > 0 ? Math.sqrt(sumSq / count) : 0;
-          rawVals.push(rms);
-          if (rms > maxVal) maxVal = rms;
+          const energy = rms * 0.2 + peak * 0.8;
+          rawVals.push(energy);
+          if (energy > maxVal) maxVal = energy;
         }
 
-        const normalized = rawVals.map((p) => Number(Math.min(1, Math.pow(p / maxVal, 0.75)).toFixed(3)));
+        const normalized = rawVals.map((p) => Number(Math.min(1, Math.pow(p / maxVal, 1.05)).toFixed(3)));
         resolve(normalized);
       };
 
@@ -466,6 +468,19 @@ export class MediaEngine {
       const start = payload.trimStart?.trim() || '00:00:00';
       const end = payload.trimEnd?.trim() || 'inf';
       args.push('--download-sections', `*${start}-${end}`, '--force-keyframes-at-cuts');
+    }
+
+    if (
+      typeof payload.volumePercent === 'number' &&
+      Number.isFinite(payload.volumePercent) &&
+      Math.round(payload.volumePercent) !== 100
+    ) {
+      const gain = Math.max(0, Math.min(2, payload.volumePercent / 100)).toFixed(2);
+      if (isAudio) {
+        args.push('--postprocessor-args', `ExtractAudio+ffmpeg_o:-af volume=${gain}`);
+      } else {
+        args.push('--postprocessor-args', `Merger+ffmpeg_o:-c:v copy -c:a aac -af volume=${gain}`);
+      }
     }
 
     args.push(payload.url);

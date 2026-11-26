@@ -179,6 +179,21 @@ def build_doc():
             ["v1.0.1 — 26/11/2026", "Bỏ phần tải phụ đề, thêm Waveform Trimmer trực quan cho MP3/M4A/WAV và thanh cắt Video hỗ trợ cuộn chuột zoom.", "Hoàn thành"],
             ["v1.0.2 — 26/11/2026", "Ẩn thanh cắt khi chưa phân tích link; tối ưu quét sóng âm bằng luồng nhẹ nhất + 8x parallel HTTP Range fetch (giảm thời gian quét 15p xuống ~3.15s).", "Hoàn thành"],
             ["v1.0.3 — 26/11/2026", "Bật Single Instance (1 phiên duy nhất), bỏ chạy ngầm Tray (đóng là thoát hẳn), tạo icon PNG/ICO riêng và xuất tài liệu Word.", "Hoàn thành"],
+            ["v1.0.4 — 27/11/2026", "Nâng cấp Waveform Trimmer chuẩn mp3cut.net (4.000 mẫu, Canvas đường bao liên tục); khóa cuộn trang ngoài khi zoom/chỉnh loa; lộ nút TitleBar & thêm nút mở rộng toàn khung ở modal Tạo tác vụ; bổ sung tốc độ phát split-button (0.1x–10x), âm lượng riêng trong app (hỗ trợ lăn chuột ±5%), thanh cuộn vùng zoom tách biệt & chỉ dẫn mốc cắt khi zoom sâu.", "Hoàn thành"],
+        ],
+    )
+
+    # 6. UI/UX Upgrade Report (v1.0.4)
+    add_heading_styled(doc, "6. Báo cáo cập nhật UI/UX Timeline Trimmer & Modal (v1.0.4 — 27/11/2026)", 1)
+    add_table(
+        doc,
+        ["Hạng mục", "Trước khi sửa", "Sau khi nâng cấp", "Kết quả"],
+        [
+            ["Sóng âm chi tiết\n(mp3cut.net style)", "260–280 thanh rời có khoảng hở dọc, thưa khi zoom sâu.", "Tăng lên 4.000 điểm mẫu (mediaEngine.ts) và vẽ đa giác đường bao đối xứng liên tục từng pixel trên Canvas.", "Đạt"],
+            ["Khóa cuộn khi zoom &\nchỉnh âm lượng", "Lăn chuột zoom sóng âm làm trôi cả hộp thoại bên ngoài.", "Dùng native wheel listener (passive: false + preventDefault) cho khung sóng âm, video preview và cụm loa.", "Đạt"],
+            ["Mở rộng / Full màn hình\n& Nút cửa sổ", "Modal che khuất thanh TitleBar (— / □ / ×) và cố định kích thước vừa.", "Đặt modal từ top-10 để luôn lộ nút cửa sổ; thêm nút Mở rộng toàn khung trên header modal; đổi placeholder ô link hợp lý hơn.", "Đạt"],
+            ["Tốc độ phát (0.1x–10x)\n& Âm lượng trong app", "Chưa có chỉnh tốc độ phát và thanh âm lượng riêng.", "Nút ghép split-button [1x | ▾] (tự nhập số dương 0.1–10 hoặc chọn nhanh); cụm loa kiểu YouTube chỉnh volume trong app & hỗ trợ lăn chuột ±5%.", "Đạt"],
+            ["Thanh cuộn vùng zoom &\nHiển thị thời gian", "Chữ 'Đoạn chọn', thanh cuộn giống thanh tua nhạc.", "Ẩn thanh cuộn ở 1.0x; chỉ hiện thanh chữ nhật tỷ lệ '⇄ Cuộn vùng zoom' khi zoom > 1x; hiển thị thời gian kim trắng / tổng video; thêm nút nhảy tới mốc cắt khi zoom sâu.", "Đạt"],
         ],
     )
 

@@ -619,7 +619,11 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
   const canPlayPreview = Boolean(mode === 'video' ? videoUrl || audioUrl : audioUrl);
 
   return (
-    <div className="rounded-xl bg-[#0a192f] border border-cyan-500/20 select-none relative">
+    <div
+      className={`rounded-xl bg-[#0a192f] border border-cyan-500/20 select-none relative flex flex-col ${
+        expanded && mode === 'video' ? 'h-[calc(100vh-146px)] min-h-[460px]' : ''
+      }`}
+    >
       {/* Hidden Audio element (used in Audio mode AND synced with DASH video-only streams in Video mode) */}
       {needsSeparateAudio && audioUrl && (
         <audio ref={audioRef} src={audioUrl} crossOrigin="anonymous" preload="metadata" />

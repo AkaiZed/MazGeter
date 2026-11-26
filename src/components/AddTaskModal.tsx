@@ -279,23 +279,17 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
             <button
               type="button"
               onClick={() => setIsFullscreen((v) => !v)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-all duration-200 cursor-pointer ${
+              className={`p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
                 isFullscreen
-                  ? 'bg-cyan-500/15 border-cyan-400/35 text-cyan-300 hover:bg-cyan-500/25'
-                  : 'bg-white/[0.04] border-white/[0.08] text-slate-300 hover:text-white hover:bg-white/[0.1]'
+                  ? 'bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25'
+                  : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
               }`}
-              title={isFullscreen ? 'Thu nhỏ khung về kích thước chuẩn' : 'Mở rộng toàn màn hình để xem video & chỉnh sóng âm'}
+              title={isFullscreen ? 'Thu nhỏ' : 'Mở rộng toàn khung'}
             >
               {isFullscreen ? (
-                <>
-                  <Minimize2 className="w-3.5 h-3.5" />
-                  <span>Thu nhỏ</span>
-                </>
+                <Minimize2 className="w-4 h-4" />
               ) : (
-                <>
-                  <Maximize2 className="w-3.5 h-3.5" />
-                  <span>Mở rộng</span>
-                </>
+                <Maximize2 className="w-4 h-4" />
               )}
             </button>
             <button

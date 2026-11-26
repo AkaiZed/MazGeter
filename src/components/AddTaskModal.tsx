@@ -533,6 +533,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                   title={mediaInfo?.title}
                   audioUrl={mediaInfo?.audioStreamUrl}
                   videoUrl={mediaInfo?.videoStreamUrl}
+                  videoHasAudio={mediaInfo?.videoHasAudio}
                   thumbnail={mediaInfo?.thumbnail}
                   peaks={waveformPeaks}
                   loadingPeaks={loadingPeaks}

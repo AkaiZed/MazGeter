@@ -59,6 +59,7 @@ export interface MediaInfo {
   waveformAudioUrl?: string | null;
   waveformFilesize?: number | null;
   videoStreamUrl?: string | null;
+  videoHasAudio?: boolean;
   videoQualities: QualityOption[];
   audioQualities: QualityOption[];
   subtitles: string[];

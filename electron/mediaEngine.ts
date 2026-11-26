@@ -132,6 +132,7 @@ export class MediaEngine {
     let waveformAudioUrl: string | null = null;
     let waveformFilesize: number | null = null;
     let videoStreamUrl: string | null = null;
+    let videoHasAudio = false;
     if (Array.isArray(data.formats)) {
       const httpFormats = data.formats.filter(
         (f: { url?: string; protocol?: string }) =>
@@ -185,7 +186,7 @@ export class MediaEngine {
         }
       )[0];
 
-      // Best progressive MP4 (both audio + video, <= 720p for fast scrub preview)
+      // 1) Try progressive MP4 (both audio + video, <= 720p) — only if no multi-language dub conflict
       const progressiveVideos = httpFormats
         .filter(
           (f: { acodec?: string; vcodec?: string; ext?: string }) =>
@@ -193,19 +194,49 @@ export class MediaEngine {
         )
         .sort((a: { height?: number }, b: { height?: number }) => (a.height || 0) - (b.height || 0));
 
-      const preferredPreview =
+      const preferredProgressive =
         progressiveVideos.find((f: { height?: number }) => (f.height || 0) >= 360 && (f.height || 0) <= 720) ||
         progressiveVideos[progressiveVideos.length - 1] ||
         null;
 
-      videoStreamUrl = preferredPreview?.url || null;
-      audioStreamUrl = audioCandidates[0]?.url || videoStreamUrl || (typeof data.url === 'string' ? data.url : null);
+      // 2) Fallback to DASH video-only H.264/MP4 (360p-720p) paired with our original audioStreamUrl!
+      //    (Most modern YouTube & multi-audio videos only serve DASH video-only streams)
+      const dashVideoOnly = httpFormats
+        .filter(
+          (f: { acodec?: string; vcodec?: string; ext?: string }) =>
+            f.vcodec && f.vcodec !== 'none' && (!f.acodec || f.acodec === 'none') && (f.ext === 'mp4' || f.ext === 'webm')
+        )
+        .sort((a: { height?: number; vcodec?: string; ext?: string }, b: { height?: number; vcodec?: string; ext?: string }) => {
+          const avcA = (a.vcodec || '').startsWith('avc1') ? 1000 : a.ext === 'mp4' ? 500 : 0;
+          const avcB = (b.vcodec || '').startsWith('avc1') ? 1000 : b.ext === 'mp4' ? 500 : 0;
+          if (avcA !== avcB) return avcB - avcA;
+          return (a.height || 0) - (b.height || 0);
+        });
+
+      const preferredDash =
+        dashVideoOnly.find((f: { height?: number }) => (f.height || 0) >= 360 && (f.height || 0) <= 720) ||
+        dashVideoOnly[0] ||
+        null;
+
+      if (preferredProgressive && originalAudioOnly.length === 0) {
+        videoStreamUrl = preferredProgressive.url || null;
+        videoHasAudio = true;
+      } else if (preferredDash) {
+        videoStreamUrl = preferredDash.url || null;
+        videoHasAudio = false;
+      } else if (preferredProgressive) {
+        videoStreamUrl = preferredProgressive.url || null;
+        videoHasAudio = true;
+      }
+
+      audioStreamUrl = audioCandidates[0]?.url || (videoHasAudio ? videoStreamUrl : null) || (typeof data.url === 'string' ? data.url : null);
       waveformAudioUrl = smallestAudio?.url || audioStreamUrl;
       waveformFilesize = smallestAudio?.filesize || smallestAudio?.filesize_approx || null;
     } else if (typeof data.url === 'string') {
       audioStreamUrl = data.url;
       waveformAudioUrl = data.url;
       videoStreamUrl = data.url;
+      videoHasAudio = true;
     }
 
     return {
@@ -223,6 +254,7 @@ export class MediaEngine {
       waveformAudioUrl,
       waveformFilesize,
       videoStreamUrl,
+      videoHasAudio,
       videoQualities,
       audioQualities,
       subtitles: Array.from(subLangs).slice(0, 15),

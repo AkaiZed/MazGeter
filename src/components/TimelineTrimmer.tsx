@@ -18,6 +18,7 @@ interface TimelineTrimmerProps {
   title?: string;
   audioUrl?: string | null;
   videoUrl?: string | null;
+  videoHasAudio?: boolean;
   thumbnail?: string | null;
   peaks: number[];
   loadingPeaks?: boolean;
@@ -104,6 +105,7 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
   title,
   audioUrl,
   videoUrl,
+  videoHasAudio = false,
   thumbnail,
   peaks,
   loadingPeaks,
@@ -182,20 +184,34 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
     setIsPlaying(false);
   }, [safeDuration, audioUrl, videoUrl]);
 
+  const needsSeparateAudio = mode === 'audio' || (mode === 'video' && !videoHasAudio);
+  const soundEl = needsSeparateAudio && audioUrl ? audioRef.current : videoRef.current;
   const activeMediaEl = mode === 'video' && videoUrl ? videoRef.current : audioRef.current;
 
   // Sync in-app player volume (0-200% via Web Audio GainNode), mute & playback speed
   useEffect(() => {
-    const el = mode === 'video' && videoUrl ? videoRef.current : audioRef.current;
-    if (!el) return;
-    el.muted = isMuted;
-    el.playbackRate = playbackSpeed;
+    const vEl = videoRef.current;
+    const aEl = audioRef.current;
+
+    if (vEl) {
+      vEl.playbackRate = playbackSpeed;
+      if (mode === 'video' && !videoHasAudio && aEl) {
+        vEl.muted = true;
+      }
+    }
+    if (aEl) {
+      aEl.playbackRate = playbackSpeed;
+    }
+
+    const targetSoundEl = needsSeparateAudio && aEl ? aEl : vEl;
+    if (!targetSoundEl) return;
+    targetSoundEl.muted = isMuted;
 
     const effective = isMuted ? 0 : volume;
     if (effective > 1) {
-      const node = ensureMediaGainNode(el);
+      const node = ensureMediaGainNode(targetSoundEl);
       if (node) {
-        el.volume = 1;
+        targetSoundEl.volume = 1;
         node.gain.gain.value = effective;
         if (node.ctx.state === 'suspended') {
           node.ctx.resume().catch(() => {});
@@ -203,71 +219,96 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
         return;
       }
     } else {
-      const existing = mediaGainMap.get(el);
+      const existing = mediaGainMap.get(targetSoundEl);
       if (existing) {
-        el.volume = 1;
+        targetSoundEl.volume = 1;
         existing.gain.gain.value = effective;
         return;
       }
     }
-    el.volume = Math.min(1, effective);
-  }, [mode, videoUrl, audioUrl, volume, isMuted, playbackSpeed]);
+    targetSoundEl.volume = Math.min(1, effective);
+  }, [mode, videoUrl, audioUrl, videoHasAudio, needsSeparateAudio, volume, isMuted, playbackSpeed]);
 
   const seekMedia = useCallback(
     (time: number) => {
       const clamped = Math.max(0, Math.min(safeDuration, time));
       setPlayhead(clamped);
-      const el = mode === 'video' && videoUrl ? videoRef.current : audioRef.current;
-      if (el && Number.isFinite(el.duration || safeDuration)) {
-        try {
-          el.currentTime = clamped;
-        } catch {
-          // ignore if metadata not loaded yet
+      const targets = [audioRef.current, videoRef.current].filter(Boolean) as HTMLMediaElement[];
+      for (const el of targets) {
+        if (Number.isFinite(el.duration || safeDuration)) {
+          try {
+            el.currentTime = clamped;
+          } catch {
+            // ignore if metadata not loaded yet
+          }
         }
       }
     },
-    [mode, videoUrl, safeDuration]
+    [safeDuration]
   );
 
-  // Playback loop bounded to [startSec, endSec]
+  // Playback loop bounded to [startSec, endSec] + keep DASH video synced to audio clock
   useEffect(() => {
-    const el = activeMediaEl;
-    if (!el) return;
+    const masterEl = (needsSeparateAudio && audioRef.current) ? audioRef.current : activeMediaEl;
+    if (!masterEl) return;
     const onTimeUpdate = () => {
-      const t = el.currentTime;
+      const t = masterEl.currentTime;
       setPlayhead(t);
+      if (mode === 'video' && !videoHasAudio && videoRef.current && audioRef.current) {
+        if (Math.abs(videoRef.current.currentTime - t) > 0.35) {
+          try {
+            videoRef.current.currentTime = t;
+          } catch {
+            // ignore
+          }
+        }
+      }
       if (t >= endSec) {
-        el.pause();
-        el.currentTime = startSec;
-        setPlayhead(startSec);
+        audioRef.current?.pause();
+        videoRef.current?.pause();
+        seekMedia(startSec);
         setIsPlaying(false);
       }
     };
     const onEnded = () => {
+      audioRef.current?.pause();
+      videoRef.current?.pause();
       setIsPlaying(false);
     };
-    el.addEventListener('timeupdate', onTimeUpdate);
-    el.addEventListener('ended', onEnded);
+    masterEl.addEventListener('timeupdate', onTimeUpdate);
+    masterEl.addEventListener('ended', onEnded);
     return () => {
-      el.removeEventListener('timeupdate', onTimeUpdate);
-      el.removeEventListener('ended', onEnded);
+      masterEl.removeEventListener('timeupdate', onTimeUpdate);
+      masterEl.removeEventListener('ended', onEnded);
     };
-  }, [activeMediaEl, startSec, endSec]);
+  }, [activeMediaEl, soundEl, mode, videoHasAudio, needsSeparateAudio, startSec, endSec, seekMedia]);
 
   const togglePlay = () => {
-    const el = mode === 'video' && videoUrl ? videoRef.current : audioRef.current;
-    if (!el) return;
+    const vEl = mode === 'video' && videoUrl ? videoRef.current : null;
+    const aEl = needsSeparateAudio && audioUrl ? audioRef.current : null;
+    const primary = aEl || vEl;
+    if (!primary) return;
+
     if (isPlaying) {
-      el.pause();
+      aEl?.pause();
+      vEl?.pause();
       setIsPlaying(false);
     } else {
-      if (playhead < startSec || playhead >= endSec - 0.1) {
-        el.currentTime = startSec;
-        setPlayhead(startSec);
-      }
-      el.play()
+      const targetStart = playhead < startSec || playhead >= endSec - 0.1 ? startSec : playhead;
+      if (aEl) aEl.currentTime = targetStart;
+      if (vEl) vEl.currentTime = targetStart;
+      setPlayhead(targetStart);
+
+      const plays: Array<Promise<void>> = [];
+      if (aEl) plays.push(aEl.play());
+      if (vEl) plays.push(vEl.play());
+      Promise.all(plays)
         .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
+        .catch(() => {
+          // If one stream failed, try keeping the other playing
+          if (primary && !primary.paused) setIsPlaying(true);
+          else setIsPlaying(false);
+        });
     }
   };
 
@@ -582,8 +623,8 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
 
   return (
     <div className="rounded-xl bg-[#0a192f] border border-cyan-500/20 select-none relative">
-      {/* Hidden Audio element for MP3/Audio mode */}
-      {mode === 'audio' && audioUrl && (
+      {/* Hidden Audio element (used in Audio mode AND synced with DASH video-only streams in Video mode) */}
+      {needsSeparateAudio && audioUrl && (
         <audio ref={audioRef} src={audioUrl} crossOrigin="anonymous" preload="metadata" />
       )}
 
@@ -694,6 +735,7 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
               ref={videoRef}
               src={videoUrl}
               crossOrigin="anonymous"
+              muted={!videoHasAudio}
               preload="metadata"
               playsInline
               className="h-full max-w-full object-contain"

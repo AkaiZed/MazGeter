@@ -4,10 +4,8 @@ import {
   clipboard,
   dialog,
   ipcMain,
-  Menu,
   nativeImage,
   shell,
-  Tray,
 } from 'electron';
 import fs from 'fs';
 import path from 'path';
@@ -25,9 +23,13 @@ import {
 } from './types';
 
 let mainWindow: BrowserWindow | null = null;
-let tray: Tray | null = null;
-let isQuitting = false;
 let pollTimer: NodeJS.Timeout | null = null;
+
+// Enforce Single Instance: only 1 MazGeter session at a time
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+}
 
 const store = new AppStore();
 const aria2 = new Aria2Engine();
@@ -58,39 +60,25 @@ async function broadcastTasks() {
   mainWindow.webContents.send('tasks:update', { tasks: merged, stats });
 }
 
-function createTray() {
-  // 16x16 solid indigo PNG icon (Windows Tray requires PNG/ICO, not SVG)
-  const pngBase64 =
-    'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAH0lEQVR42mP8z8Dw/z8DLoCJgYGJgYGBgYHhfwYGhgEA/4ME/e0q1u8AAAAASUVORK5CYII=';
-  const icon = nativeImage.createFromDataURL(`data:image/png;base64,${pngBase64}`);
-  tray = new Tray(icon);
-  tray.setToolTip('MazGeter — All-in-One Downloader');
-
-  const menu = Menu.buildFromTemplate([
-    {
-      label: 'Mở MazGeter',
-      click: () => {
-        mainWindow?.show();
-        mainWindow?.focus();
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'Thoát hoàn toàn',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-  tray.setContextMenu(menu);
-  tray.on('double-click', () => {
-    mainWindow?.show();
-    mainWindow?.focus();
-  });
+function resolveAppIcon(): Electron.NativeImage | undefined {
+  const candidates = [
+    path.join(process.resourcesPath, 'icon.ico'),
+    path.join(process.resourcesPath, 'icon.png'),
+    path.join(__dirname, '../resources/icon.ico'),
+    path.join(__dirname, '../resources/icon.png'),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      const img = nativeImage.createFromPath(p);
+      if (!img.isEmpty()) return img;
+    }
+  }
+  return undefined;
 }
 
 function createWindow() {
+  const appIcon = resolveAppIcon();
+
   mainWindow = new BrowserWindow({
     width: 1220,
     height: 780,
@@ -98,6 +86,7 @@ function createWindow() {
     minHeight: 640,
     show: false,
     frame: false,
+    icon: appIcon,
     backgroundColor: '#0b0e14',
     titleBarStyle: 'hidden',
     webPreferences: {
@@ -122,12 +111,9 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  mainWindow.on('close', (e) => {
-    const settings = store.getSettings();
-    if (!isQuitting && settings.closeToTray) {
-      e.preventDefault();
-      mainWindow?.hide();
-    }
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    app.quit();
   });
 }
 
@@ -272,26 +258,32 @@ function registerIpc() {
   });
 }
 
-app.whenReady().then(async () => {
-  registerIpc();
-  await aria2.start(store.getSettings());
-  createWindow();
-  createTray();
+if (gotTheLock) {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
 
-  pollTimer = setInterval(() => {
-    broadcastTasks().catch(() => {});
-  }, 1000);
-});
+  app.whenReady().then(async () => {
+    registerIpc();
+    await aria2.start(store.getSettings());
+    createWindow();
+
+    pollTimer = setInterval(() => {
+      broadcastTasks().catch(() => {});
+    }, 1000);
+  });
+}
 
 app.on('before-quit', () => {
-  isQuitting = true;
   if (pollTimer) clearInterval(pollTimer);
   media.stopAll();
   aria2.stop();
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  app.quit();
 });

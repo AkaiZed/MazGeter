@@ -147,16 +147,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               />
             </div>
           </div>
-
-          <label className="flex items-center gap-2.5 text-xs text-slate-300 pt-1 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.closeToTray}
-              onChange={(e) => setForm({ ...form, closeToTray: e.target.checked })}
-              className="accent-indigo-500 rounded"
-            />
-            <span>Thu nhỏ xuống khay hệ thống (System Tray) khi bấm nút đóng</span>
-          </label>
         </div>
 
         {/* Engine Binaries Status */}

@@ -1,7 +1,7 @@
 {
   "name": "mazgeter",
   "version": "1.0.0",
-  "description": "MazGeter — All-in-One Desktop Download Manager & Media Downloader (Motrix + XGetter style)",
+  "description": "MazGeter — All-in-One Desktop Download Manager & Media Studio for Windows",
   "main": "dist-electron/main.js",
   "author": "AkaiZed",
   "license": "MIT",

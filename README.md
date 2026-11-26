@@ -1,19 +1,24 @@
 # MazGeter
 
-**All-in-One Desktop Download Manager & Media Downloader** cho Windows — kết hợp sức mạnh tải đa luồng/Torrent của **Motrix (`aria2c`)** và tải video/audio 70+ nền tảng + công cụ media của **XGetter (`yt-dlp` + `ffmpeg`)**.
+**All-in-One Desktop Download Manager & Media Studio** cho Windows — tích hợp trình tải file đa luồng / Torrent (`aria2c`), tải video/âm thanh đa nền tảng (`yt-dlp`), xử lý media (`ffmpeg`) và bộ cắt sóng âm trực quan ngay trên máy tính.
 
 ## Tính năng chính
-- **Smart AIO Engine**: Tự động nhận diện link video/mạng xã hội (YouTube, TikTok, Facebook, Instagram, X, Bilibili...) dùng `yt-dlp + ffmpeg` hoặc link tải file trực tiếp / Magnet / Torrent dùng `aria2c` đa luồng.
-- **Motrix-style Task Manager**: Quản lý hàng đợi tải xuống theo thời gian thực (Đang tải / Đang chờ / Hoàn thành), tạm dừng, tiếp tục, hủy, giới hạn tốc độ, mở thư mục chứa file.
-- **XGetter-style Media Studio**: Phân tích link video lấy thumbnail, chọn chất lượng lên tới 4K/8K, tải MP4/MP3, tách phụ đề (SRT/VTT), cắt đoạn video/audio theo thời gian (`start` → `end`).
-- **FFmpeg Media Tools**: Chuyển đổi định dạng (MP4, MP3, WebM, WAV, MKV), tách âm thanh, cắt video ngay trên máy mà không cần tải lại.
-- **Chạy 100% Local**: Sử dụng trực tiếp IP mạng nhà, không qua server trung gian, không bị YouTube chặn IP Datacenter.
+- **Dual-Engine thông minh**:
+  - **`aria2c` (JSON-RPC)**: Tải file HTTP/HTTPS/FTP đa luồng tốc độ cao (lên tới 32 luồng), tạm dừng/tiếp tục, lưu phiên tải, hỗ trợ **Magnet link** và **file `.torrent`**.
+  - **`yt-dlp` + `ffmpeg`**: Tải video/âm thanh từ hơn 70 nền tảng trực tuyến (lên tới 4K/8K, MP4, MKV, MP3, M4A, WAV), hỗ trợ playlist.
+- **Bộ cắt Sóng âm & Timeline trực quan**:
+  - Tự động quét sóng âm thật (hiển thị rõ khoảng lặng phục vụ luyện nghe ngoại ngữ / tách câu).
+  - Kéo thả mốc đầu – cuối chính xác tới `0.1s`, hỗ trợ cuộn chuột phóng to trục thời gian `1.0x – 20.0x` và nghe/xem thử trực tiếp.
+- **FFmpeg Media Tools**: Chuyển đổi định dạng (MP4, MKV, WebM, MP3, M4A, WAV), tách âm thanh, cắt đoạn video offline ngay trên máy.
+- **Chạy 100% Local**: Hoạt động trực tiếp bằng IP mạng cá nhân, bảo mật dữ liệu và không phụ thuộc server trung gian.
 
 ## Phát triển & Chạy thử
 ```powershell
 npm install
 npm run dev
 ```
+
+Hoặc bấm đúp `Start-MazGeter.bat` sau khi build (`npm run build`).
 
 ## Đóng gói Windows (.exe)
 ```powershell

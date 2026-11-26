@@ -93,7 +93,7 @@ def build_doc():
     r_meta.font.color.rgb = RGBColor(0x47, 0x55, 0x69)
 
     p_intro = doc.add_paragraph(
-        "Tài liệu này tổng hợp kiến trúc, môi trường cài đặt, lộ trình phát triển và nhật ký các tính năng đã hoàn thiện của MazGeter — trình quản lý tải xuống All-in-One (kết hợp Motrix + XGetter). Khi cập nhật tính năng mới, hãy chạy lại script docs/generate_roadmap.py để đồng bộ tài liệu."
+        "Tài liệu này tổng hợp kiến trúc, môi trường cài đặt, lộ trình phát triển và nhật ký các tính năng đã hoàn thiện của MazGeter — trình quản lý tải xuống và xử lý media All-in-One trên Windows. Khi cập nhật tính năng mới, hãy chạy lại script docs/generate_roadmap.py để đồng bộ tài liệu."
     )
     p_intro.runs[0].font.size = Pt(10.5)
 
@@ -103,17 +103,17 @@ def build_doc():
     add_bullet(
         doc,
         "Mục đích sử dụng: ",
-        "Ứng dụng Desktop All-in-One cho Windows, gộp sức mạnh tải file đa luồng/Torrent kiểu Motrix và tải video/âm thanh 70+ nền tảng + cắt ghép media kiểu XGetter & mp3cut.net.",
+        "Ứng dụng Desktop All-in-One cho Windows, tích hợp tải file đa luồng/Torrent, tải video/âm thanh từ hơn 70 nền tảng trực tuyến, cắt sóng âm luyện nghe và xử lý chuyển đổi media ngay trên máy.",
     )
     add_bullet(
         doc,
         "Lợi thế kiến trúc Local: ",
-        "Chạy trực tiếp trên máy người dùng bằng IP mạng nhà, loại bỏ hoàn toàn tình trạng YouTube chặn IP Datacenter (Render/Cloud) và không cần server trung gian hay cookies.",
+        "Chạy trực tiếp trên máy người dùng bằng IP mạng nhà, tránh tình trạng bị chặn IP Datacenter (Render/Cloud) và không cần server trung gian hay cookies.",
     )
     add_bullet(
         doc,
         "Trải nghiệm người dùng: ",
-        "Chạy duy nhất 1 phiên (Single Instance), tắt cửa sổ là thoát hoàn toàn (không chạy ngầm Tray), có icon nhận diện riêng và giao diện tối giản hiện đại.",
+        "Chạy duy nhất 1 phiên (Single Instance), tắt cửa sổ là thoát hoàn toàn (không chạy ngầm), có icon nhận diện riêng và giao diện tối giản hiện đại.",
     )
 
     # 2. Môi trường
@@ -139,7 +139,7 @@ def build_doc():
     add_bullet(
         doc,
         "Giao diện UI (React 19 + Vite + Tailwind CSS v4): ",
-        "Thanh tiêu đề tùy biến, Sidebar kiểu Motrix kèm bộ đo tốc độ toàn cục, danh sách tác vụ real-time (Đang tải / Đang chờ / Hoàn thành), Media Tools (FFmpeg Studio) và trang Cài đặt.",
+        "Thanh tiêu đề tùy biến, Sidebar điều hướng kèm bộ đo tốc độ toàn cục, danh sách tác vụ real-time (Đang tải / Đang chờ / Hoàn thành), Media Tools (FFmpeg Studio) và trang Cài đặt.",
     )
     add_bullet(
         doc,
@@ -149,16 +149,16 @@ def build_doc():
     add_bullet(
         doc,
         "Engine Media & Waveform Trimmer (mediaEngine.ts + TimelineTrimmer.tsx): ",
-        "Phân tích link bằng yt-dlp; khi chọn MP3/M4A/WAV sẽ quét sóng âm thật bằng phương pháp 8x Parallel HTTP Range Fetch + FFmpeg (chỉ ~1–3 giây cho bài nghe JLPT 15 phút) để hiện rõ khoảng lặng. Hỗ trợ phóng to trục thời gian 1.0x–20.0x bằng con lăn chuột kiểu CapCut.",
+        "Phân tích link bằng yt-dlp; khi chọn MP3/M4A/WAV sẽ quét sóng âm thật bằng phương pháp 8x Parallel HTTP Range Fetch + FFmpeg (chỉ ~1–3 giây cho bài nghe 15 phút) để hiện rõ khoảng lặng. Hỗ trợ phóng to trục thời gian 1.0x–20.0x bằng con lăn chuột để căn chỉnh chính xác.",
     )
 
     # 4. Lộ trình
     add_heading_styled(doc, "4. Lộ trình phát triển theo từng Giai đoạn", 1)
 
     add_heading_styled(doc, "Giai đoạn 1 (MVP) — Khung AIO, Lõi kép & Bộ cắt Waveform [HOÀN THÀNH]", 2)
-    add_bullet(doc, "Lõi tải kép: ", "Tích hợp hoàn chỉnh aria2c JSON-RPC (tải đa luồng, Torrent/Magnet) và yt-dlp + FFmpeg (70+ trang web).")
-    add_bullet(doc, "Giao diện Motrix + XGetter: ", "Quản lý hàng đợi, mở file/thư mục nhanh, Media Tools (convert, tách nhạc, cắt video offline).")
-    add_bullet(doc, "Bộ cắt Sóng âm & CapCut Zoom: ", "Tối giản (chỉ hiện sau khi phân tích link), hiển thị sóng âm xanh rõ ngắt quãng JLPT, kéo đầu–cuối chính xác 0.1s, cuộn chuột zoom 1x–20x.")
+    add_bullet(doc, "Lõi tải kép: ", "Tích hợp hoàn chỉnh aria2c JSON-RPC (tải đa luồng, Torrent/Magnet) và yt-dlp + FFmpeg (70+ nền tảng).")
+    add_bullet(doc, "Giao diện quản lý tác vụ: ", "Quản lý hàng đợi, mở file/thư mục nhanh, Media Tools (convert, tách nhạc, cắt video offline).")
+    add_bullet(doc, "Bộ cắt Sóng âm & Timeline Zoom: ", "Tối giản (chỉ hiện sau khi phân tích link), hiển thị sóng âm xanh rõ ngắt quãng, kéo đầu–cuối chính xác 0.1s, cuộn chuột zoom 1x–20x.")
     add_bullet(doc, "Đóng gói & Vận hành: ", "Single Instance, tắt là thoát dứt khoát không chạy ngầm, icon riêng và file Start-MazGeter.bat.")
 
     add_heading_styled(doc, "Giai đoạn 2 — Đóng gói phát hành Windows (.exe Installer / Portable) [TIẾP THEO]", 2)
@@ -166,7 +166,7 @@ def build_doc():
     add_bullet(doc, "Cổng tải trên Web: ", "Đưa bản release MazGeter.exe lên GitHub Releases và liên kết lên trang cổng tải mazdownloader.vercel.app.")
 
     add_heading_styled(doc, "Giai đoạn 3 — Mở rộng tiện ích nâng cao", 2)
-    add_bullet(doc, "Tự động cập nhật yt-dlp: ", "Thêm nút cập nhật yt-dlp.exe ngay trong phần Cài đặt để luôn tương thích thuật toán mới của YouTube/TikTok.")
+    add_bullet(doc, "Tự động cập nhật yt-dlp: ", "Thêm nút cập nhật yt-dlp.exe ngay trong phần Cài đặt để luôn tương thích thuật toán mới của các nền tảng video.")
     add_bullet(doc, "Browser Extension / Deep Link: ", "Bắt link tải trực tiếp từ trình duyệt Chrome/Edge/Cốc Cốc chuyển thẳng vào MazGeter.")
 
     # 5. Changelog
@@ -176,7 +176,7 @@ def build_doc():
         ["Phiên bản / Ngày", "Nội dung cập nhật chính", "Trạng thái"],
         [
             ["v1.0 — 26/11/2026 (Khởi tạo)", "Dựng repo MazGeter (Electron + React + Tailwind v4), tải aria2c v1.37.0, kết nối yt-dlp & FFmpeg, hoàn thiện TaskList, MediaToolsView, SettingsView.", "Hoàn thành"],
-            ["v1.0.1 — 26/11/2026", "Bỏ phần tải phụ đề, thêm Waveform Trimmer kiểu mp3cut.net cho MP3/M4A/WAV và thanh cắt Video hỗ trợ cuộn chuột zoom kiểu CapCut.", "Hoàn thành"],
+            ["v1.0.1 — 26/11/2026", "Bỏ phần tải phụ đề, thêm Waveform Trimmer trực quan cho MP3/M4A/WAV và thanh cắt Video hỗ trợ cuộn chuột zoom.", "Hoàn thành"],
             ["v1.0.2 — 26/11/2026", "Ẩn thanh cắt khi chưa phân tích link; tối ưu quét sóng âm bằng luồng nhẹ nhất + 8x parallel HTTP Range fetch (giảm thời gian quét 15p xuống ~3.15s).", "Hoàn thành"],
             ["v1.0.3 — 26/11/2026", "Bật Single Instance (1 phiên duy nhất), bỏ chạy ngầm Tray (đóng là thoát hẳn), tạo icon PNG/ICO riêng và xuất tài liệu Word.", "Hoàn thành"],
         ],

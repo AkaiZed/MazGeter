@@ -621,7 +621,7 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
   return (
     <div
       className={`rounded-xl bg-[#0a192f] border border-cyan-500/20 select-none relative flex flex-col ${
-        expanded && mode === 'video' ? 'h-[calc(100vh-146px)] min-h-[460px]' : ''
+        expanded && mode === 'video' ? 'h-[calc(100vh-164px)] min-h-[420px]' : ''
       }`}
     >
       {/* Hidden Audio element (used in Audio mode AND synced with DASH video-only streams in Video mode) */}
@@ -722,13 +722,13 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
         </div>
       </div>
 
-      {/* Video Preview Area — stretches flex-1 to fill all available vertical space while keeping waveform & controls 100% visible */}
+      {/* Video Preview Area — fixed flex-1 height, never shifts when zooming waveform */}
       {mode === 'video' && (
         <div
           ref={videoAreaRef}
           className={`relative bg-black/85 flex items-center justify-center ${
-            expanded ? 'flex-1 min-h-[240px]' : 'h-48'
-          } border-b border-white/[0.06] overflow-hidden group transition-all duration-300 ease-out`}
+            expanded ? 'flex-1 min-h-0' : 'h-48'
+          } border-b border-white/[0.06] overflow-hidden group`}
         >
           {videoUrl ? (
             <video
@@ -882,34 +882,37 @@ export const TimelineTrimmer: React.FC<TimelineTrimmerProps> = ({
           )}
         </div>
 
-        {/* Distinct Zoom Scrollbar (NOT a player seekbar) — only appears when zoom > 1 */}
-        {zoom > 1 && (
-          <div className="mt-1.5 flex items-center gap-2">
-            <span className="text-[9.5px] text-cyan-300/80 whitespace-nowrap font-medium">
-              ⇄ Cuộn vùng zoom
-            </span>
+        {/* Distinct Zoom Scrollbar — fixed height slot so zooming NEVER resizes the video above */}
+        <div
+          className={`mt-1.5 h-4 flex items-center gap-2 transition-opacity duration-150 ${
+            zoom > 1 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          <span className="text-[9.5px] text-cyan-300/80 whitespace-nowrap font-medium">
+            ⇄ Cuộn vùng zoom
+          </span>
+          <div
+            ref={panBarRef}
+            onMouseDown={(e) => {
+              if (zoom <= 1) return;
+              setPanDragging(true);
+              const rect = e.currentTarget.getBoundingClientRect();
+              const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+              const centeredStart = ratio * safeDuration - visibleSpan / 2;
+              setViewStart(Math.max(0, Math.min(safeDuration - visibleSpan, centeredStart)));
+            }}
+            className="relative flex-1 h-2.5 rounded bg-[#061326] border border-cyan-500/25 cursor-grab active:cursor-grabbing overflow-hidden"
+            title="Thanh cuộn vùng đang phóng to (không phải thanh tua phát) — kéo để xê dịch sóng âm"
+          >
             <div
-              ref={panBarRef}
-              onMouseDown={(e) => {
-                setPanDragging(true);
-                const rect = e.currentTarget.getBoundingClientRect();
-                const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                const centeredStart = ratio * safeDuration - visibleSpan / 2;
-                setViewStart(Math.max(0, Math.min(safeDuration - visibleSpan, centeredStart)));
+              className="absolute inset-y-0 rounded bg-cyan-400/60 hover:bg-cyan-300/80 border border-cyan-200/50"
+              style={{
+                left: `${(viewStart / safeDuration) * 100}%`,
+                width: `${Math.max(6, (visibleSpan / safeDuration) * 100)}%`,
               }}
-              className="relative flex-1 h-2.5 rounded bg-[#061326] border border-cyan-500/25 cursor-grab active:cursor-grabbing overflow-hidden"
-              title="Thanh cuộn vùng đang phóng to (không phải thanh tua phát) — kéo để xê dịch sóng âm"
-            >
-              <div
-                className="absolute inset-y-0 rounded bg-cyan-400/60 hover:bg-cyan-300/80 border border-cyan-200/50"
-                style={{
-                  left: `${(viewStart / safeDuration) * 100}%`,
-                  width: `${Math.max(6, (visibleSpan / safeDuration) * 100)}%`,
-                }}
-              />
-            </div>
+            />
           </div>
-        )}
+        </div>
 
         {/* Time endpoints + Playhead / Total time */}
         <div className="mt-1.5 flex items-center justify-between text-[10px] font-mono text-cyan-300/75">

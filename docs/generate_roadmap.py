@@ -87,7 +87,7 @@ def build_doc():
     p_meta = doc.add_paragraph()
     p_meta.paragraph_format.space_after = Pt(6)
     r_meta = p_meta.add_run(
-        "Thư mục: E:\\ProfileGit\\MazGeter  |  Git: AkaiZed/MazGeter (main)  |  Nền tảng: Windows Desktop (Electron + React)  |  v1.0 (26/11/2026)"
+        "Thư mục: E:\\ProfileGit\\MazGeter  |  Git: AkaiZed/MazGeter (main)  |  Nền tảng: Windows Desktop (Electron + React)  |  v1.1 (27/11/2026)"
     )
     r_meta.font.size = Pt(9.5)
     r_meta.font.color.rgb = RGBColor(0x47, 0x55, 0x69)
@@ -179,17 +179,18 @@ def build_doc():
             ["v1.0.1 — 26/11/2026", "Bỏ phần tải phụ đề, thêm Waveform Trimmer trực quan cho MP3/M4A/WAV và thanh cắt Video hỗ trợ cuộn chuột zoom.", "Hoàn thành"],
             ["v1.0.2 — 26/11/2026", "Ẩn thanh cắt khi chưa phân tích link; tối ưu quét sóng âm bằng luồng nhẹ nhất + 8x parallel HTTP Range fetch (giảm thời gian quét 15p xuống ~3.15s).", "Hoàn thành"],
             ["v1.0.3 — 26/11/2026", "Bật Single Instance (1 phiên duy nhất), bỏ chạy ngầm Tray (đóng là thoát hẳn), tạo icon PNG/ICO riêng và xuất tài liệu Word.", "Hoàn thành"],
-            ["v1.0.4 — 27/11/2026", "Nâng cấp Waveform Trimmer chuẩn mp3cut.net (4.000 mẫu, Canvas đường bao liên tục); khóa cuộn trang ngoài khi zoom/chỉnh loa; lộ nút TitleBar & thêm nút mở rộng toàn khung ở modal Tạo tác vụ; bổ sung tốc độ phát split-button (0.1x–10x), âm lượng riêng trong app (hỗ trợ lăn chuột ±5%), thanh cuộn vùng zoom tách biệt & chỉ dẫn mốc cắt khi zoom sâu.", "Hoàn thành"],
+            ["v1.0.4 — 27/11/2026", "Nâng cấp Waveform Trimmer độ phân giải cao (Canvas đường bao liên tục từng pixel); khóa cuộn trang ngoài khi zoom/chỉnh loa; bổ sung tốc độ phát split-button (0.1x–10x), âm lượng riêng trong app (lăn chuột ±5%), thanh cuộn vùng zoom tách biệt & chỉ dẫn mốc cắt khi zoom sâu.", "Hoàn thành"],
+            ["v1.1 — 27/11/2026", "Đưa form tải xuống ra màn hình chính, gộp tab Đang tải & Tạm dừng, nút ẩn/hiện thanh bên đồng bộ mọi trang, tự động phân tích ngay khi dán link, cần gạt Chỉ tải 1 video / Tải full danh sách, kích âm thanh 0–200% (nghe thử + xuất FFmpeg), đồng bộ phát video DASH + âm thanh gốc ở MP4, chế độ phóng to Video toàn khung không giật khi zoom sóng âm, sắp xếp định dạng (MP4, MP3, MKV, M4A, WAV), chân trang ndmanh.vercel.app, đóng gói MazGeter.exe riêng (auto-replace phiên cũ) và shortcut Windows Search.", "Hoàn thành"],
         ],
     )
 
     # 6. UI/UX Upgrade Report (v1.0.4)
-    add_heading_styled(doc, "6. Báo cáo cập nhật UI/UX Timeline Trimmer & Modal (v1.0.4 — 27/11/2026)", 1)
+    add_heading_styled(doc, "6. Báo cáo cập nhật UI/UX Timeline Trimmer & Giao diện (v1.0.4 – v1.1 — 27/11/2026)", 1)
     add_table(
         doc,
         ["Hạng mục", "Trước khi sửa", "Sau khi nâng cấp", "Kết quả"],
         [
-            ["Sóng âm chi tiết\n(mp3cut.net style)", "260–280 thanh rời có khoảng hở dọc, thưa khi zoom sâu.", "Tăng lên 4.000 điểm mẫu (mediaEngine.ts) và vẽ đa giác đường bao đối xứng liên tục từng pixel trên Canvas.", "Đạt"],
+            ["Sóng âm chi tiết", "260–280 thanh rời có khoảng hở dọc, thưa khi zoom sâu.", "Nâng cấp độ phân giải cao (mediaEngine.ts) và vẽ sóng âm đối xứng liên tục từng pixel trên Canvas; lọc đúng luồng âm thanh gốc (bỏ AI auto-dub) ở 8000Hz RMS.", "Đạt"],
             ["Khóa cuộn khi zoom &\nchỉnh âm lượng", "Lăn chuột zoom sóng âm làm trôi cả hộp thoại bên ngoài.", "Dùng native wheel listener (passive: false + preventDefault) cho khung sóng âm, video preview và cụm loa.", "Đạt"],
             ["Mở rộng / Full màn hình\n& Nút cửa sổ", "Modal che khuất thanh TitleBar (— / □ / ×) và cố định kích thước vừa.", "Đặt modal từ top-10 để luôn lộ nút cửa sổ; thêm nút Mở rộng toàn khung trên header modal; đổi placeholder ô link hợp lý hơn.", "Đạt"],
             ["Tốc độ phát (0.1x–10x)\n& Âm lượng trong app", "Chưa có chỉnh tốc độ phát và thanh âm lượng riêng.", "Nút ghép split-button [1x | ▾] (tự nhập số dương 0.1–10 hoặc chọn nhanh); cụm loa kiểu YouTube chỉnh volume trong app & hỗ trợ lăn chuột ±5%.", "Đạt"],
